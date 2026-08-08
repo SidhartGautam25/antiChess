@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <!-- Dark Charcoal App Icon Background -->
+  <rect width="512" height="512" rx="112" fill="#18181B" />
+
+  <!-- Subtle Subtle Outer Glow Frame -->
+  <rect x="24" y="24" width="464" height="464" rx="90" fill="none" stroke="#27272A" stroke-width="4" />
+
+  <!-- 1. Left Square Tile (Ivory/Beige Theme) -->
+  <rect x="80" y="136" width="240" height="240" rx="28" fill="#F3F4F6" stroke="#E5E7EB" stroke-width="6" />
+  
+  <!-- Number '1' inside Square -->
+  <text x="180" y="285" font-family="'Inter', 'Helvetica', sans-serif" font-size="110" font-weight="900" fill="#374151" text-anchor="middle">1</text>
+
+  <!-- 2. Right Circular Piece (Royal Blue Gemstone) with Transparency -->
+  <circle cx="330" cy="256" r="120" fill="rgba(37, 99, 235, 0.85)" stroke="#60A5FA" stroke-width="8" />
+
+  <!-- Number '3' inside Circle -->
+  <text x="375" y="285" font-family="'Inter', 'Helvetica', sans-serif" font-size="110" font-weight="900" fill="#FFFFFF" text-anchor="middle">3</text>
+
+  <!-- 3. Overlap Intersection Area (The '2') -->
+  <!-- Clip Path to isolate the overlapping section -->
+  <g clip-path="url(#tile-clip)">
+    <circle cx="330" cy="256" r="120" fill="rgba(245, 158, 11, 0.9)" />
+  </g>
+
+  <defs>
+    <clipPath id="tile-clip">
+      <rect x="80" y="136" width="240" height="240" rx="28" />
+    </clipPath>
+  </defs>
+
+  <!-- Number '2' inside Overlap Section -->
+  <text x="285" y="280" font-family="'Inter', 'Helvetica', sans-serif" font-size="64" font-weight="900" fill="#1E293B" text-anchor="middle">2</text>
+</svg>

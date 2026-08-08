@@ -41,40 +41,148 @@ export default function GameScreen() {
 
   // Calculate captured pieces
   const getCapturedCount = (player: Player, type: PieceType) => {
-    // Expected count: Scout = 2, Rider = 1
-    const expected = type === PieceType.SCOUT ? 2 : 1;
+    // Expected count: Scout = 2, Jumper = 2, Rider = 2 (in 8x8 setup with 6 pieces)
+    const expected = 2;
     const current = pieces.filter((p) => p.player === player && p.type === type).length;
     return Math.max(0, expected - current);
   };
 
   const p1ScoutsCaptured = getCapturedCount(1, PieceType.SCOUT);
+  const p1JumpersCaptured = getCapturedCount(1, PieceType.JUMPER);
   const p1RidersCaptured = getCapturedCount(1, PieceType.RIDER);
   const p2ScoutsCaptured = getCapturedCount(2, PieceType.SCOUT);
+  const p2JumpersCaptured = getCapturedCount(2, PieceType.JUMPER);
   const p2RidersCaptured = getCapturedCount(2, PieceType.RIDER);
 
   // Render Captured pieces indicators
   const renderCapturedBar = (player: Player) => {
     const isP1 = player === 1;
     const scouts = isP1 ? p1ScoutsCaptured : p2ScoutsCaptured;
+    const jumpers = isP1 ? p1JumpersCaptured : p2JumpersCaptured;
     const riders = isP1 ? p1RidersCaptured : p2RidersCaptured;
-    const pColor = isP1 ? COLORS.player1.primary : COLORS.player2.primary;
+    
+    // We want the piece to be rendered using the CAPTURED PLAYER's colors and design!
+    // player = 1 => Player 1's pieces (Ivory/Gold) were lost
+    // player = 2 => Player 2's pieces (Ebony/Crimson) were lost
+    const playerColors = player === 1 ? COLORS.player1 : COLORS.player2;
 
     const items = [];
+    
+    const renderMiniPiece = (type: PieceType, key: string) => {
+      const size = 24;
+      const isScout = type === PieceType.SCOUT;
+      const isRider = type === PieceType.RIDER;
+      const isJumper = type === PieceType.JUMPER;
+      
+      const shapeStyle = isScout
+        ? { borderRadius: 4 }
+        : isRider
+        ? { borderRadius: size / 2 }
+        : {}; // Octagon is custom
+        
+      const labelColor = player === 1 ? '#1F2937' : '#FFFFFF';
+      const letter = isScout ? 'S' : isRider ? 'R' : 'J';
+      
+      if (isJumper) {
+        return (
+          <View key={key} style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center', marginHorizontal: 1 }}>
+            {/* Base square */}
+            <View 
+              style={[
+                styles.capturedMiniPiece,
+                {
+                  position: 'absolute',
+                  width: size,
+                  height: size,
+                  borderColor: playerColors.primary,
+                  backgroundColor: playerColors.secondary,
+                  borderRadius: size * 0.20,
+                }
+              ]}
+            />
+            {/* 45 degree rotated square */}
+            <View 
+              style={[
+                styles.capturedMiniPiece,
+                {
+                  position: 'absolute',
+                  width: size,
+                  height: size,
+                  borderColor: playerColors.primary,
+                  backgroundColor: playerColors.secondary,
+                  borderRadius: size * 0.20,
+                  transform: [{ rotate: '45deg' }],
+                }
+              ]}
+            />
+            {/* Inner masking ring */}
+            <View 
+              style={[
+                styles.capturedMiniInnerRing,
+                {
+                  position: 'absolute',
+                  borderRadius: (size * 0.70) / 2,
+                  borderColor: playerColors.primary + '40',
+                  backgroundColor: playerColors.secondary,
+                  width: size * 0.70,
+                  height: size * 0.70,
+                  zIndex: 10,
+                }
+              ]}
+            >
+              <Text style={[styles.capturedMiniText, { color: labelColor, fontSize: size * 0.35 }]}>
+                {letter}
+              </Text>
+            </View>
+          </View>
+        );
+      }
+      
+      return (
+        <View 
+          key={key} 
+          style={[
+            styles.capturedMiniPiece,
+            shapeStyle,
+            {
+              borderColor: playerColors.primary,
+              backgroundColor: playerColors.secondary,
+              width: size,
+              height: size,
+              marginHorizontal: 1,
+            }
+          ]}
+        >
+          <View 
+            style={[
+              styles.capturedMiniInnerRing,
+              isScout ? { borderRadius: 3 } : { borderRadius: (size * 0.70) / 2 },
+              {
+                borderColor: playerColors.primary + '40',
+                width: size * 0.70,
+                height: size * 0.70,
+              }
+            ]}
+          >
+            <Text style={[styles.capturedMiniText, { color: labelColor, fontSize: size * 0.38 }]}>
+              {letter}
+            </Text>
+          </View>
+        </View>
+      );
+    };
+
     // Render captured Scouts
     for (let i = 0; i < scouts; i++) {
-      items.push(
-        <View key={`scout-${i}`} style={[styles.capturedDot, { borderColor: pColor }]}>
-          <Text style={[styles.capturedDotText, { color: pColor }]}>S</Text>
-        </View>
-      );
+      items.push(renderMiniPiece(PieceType.SCOUT, `scout-${i}`));
     }
-    // Render captured Rider
+    // Render captured Jumpers
+    for (let i = 0; i < jumpers; i++) {
+      items.push(renderMiniPiece(PieceType.JUMPER, `jumper-${i}`));
+    }
+    // Render captured Riders
     for (let i = 0; i < riders; i++) {
-      items.push(
-        <View key={`rider-${i}`} style={[styles.capturedDot, { borderColor: pColor }]}>
-          <Text style={[styles.capturedDotText, { color: pColor }]}>R</Text>
-        </View>
-      );
+      items.push(renderMiniPiece(PieceType.RIDER, `rider-${i}`));
     }
 
     if (items.length === 0) {
@@ -98,7 +206,7 @@ export default function GameScreen() {
     <SafeAreaView style={styles.safeArea}>
       {/* Header Bar */}
       <HeaderBar 
-        title={mode === 'VS_BOT' ? `VS Bot (${LEVEL_REGISTRY[level]?.name})` : 'Pass & Play'} 
+        title={mode === 'VS_BOT' ? `Anka-Chaal (${LEVEL_REGISTRY[level]?.name})` : 'Anka-Chaal (Local)'} 
       />
 
       <View style={styles.container}>
@@ -113,10 +221,10 @@ export default function GameScreen() {
               ]} 
             />
             <Text style={styles.playerName}>
-              {mode === 'VS_BOT' ? 'AI Bot (Red)' : 'Player 2 (Red)'}
+              {mode === 'VS_BOT' ? 'AI Bot (Ebony)' : 'Player 2 (Ebony)'}
             </Text>
           </View>
-          {renderCapturedBar(2)}
+          {renderCapturedBar(1)}
         </View>
 
         {/* Turn indicator banner */}
@@ -131,7 +239,7 @@ export default function GameScreen() {
               {winner ? 'GAME OVER' : `${getActivePlayerName().toUpperCase()}'S TURN`}
             </Text>
           )}
-          <Text style={styles.movesCountText}>Move: {movesCount + 1}</Text>
+          <Text style={styles.movesCountText}>Moves: {movesCount}/50 (Remaining: {50 - movesCount})</Text>
         </View>
 
         {/* 5x5 Game Board */}
@@ -148,9 +256,9 @@ export default function GameScreen() {
         <View style={styles.playerPanel}>
           <View style={styles.playerInfo}>
             <View style={[styles.playerIndicatorCircle, { backgroundColor: COLORS.player1.primary }]} />
-            <Text style={styles.playerName}>Player 1 (Blue)</Text>
+            <Text style={styles.playerName}>Player 1 (Ivory)</Text>
           </View>
-          {renderCapturedBar(1)}
+          {renderCapturedBar(2)}
         </View>
 
         {/* Controller Panel */}
@@ -187,26 +295,38 @@ export default function GameScreen() {
               style={[
                 styles.modalCard,
                 { 
-                  borderColor: winner === 1 ? COLORS.player1.primary : COLORS.player2.primary,
-                  shadowColor: winner === 1 ? COLORS.player1.primary : COLORS.player2.primary,
+                  borderColor: winner === 0 ? '#4B5563' : winner === 1 ? COLORS.player1.primary : COLORS.player2.primary,
+                  shadowColor: winner === 0 ? '#4B5563' : winner === 1 ? COLORS.player1.primary : COLORS.player2.primary,
                 }
               ]}
             >
               <Ionicons 
-                name="trophy" 
+                name={winner === 0 ? "flag" : "trophy"} 
                 size={64} 
-                color={winner === 1 ? COLORS.player1.primary : COLORS.player2.primary} 
+                color={
+                  winner === 0 
+                    ? '#9CA3AF' 
+                    : winner === 1 
+                    ? COLORS.player1.primary 
+                    : COLORS.player2.primary
+                } 
                 style={styles.trophyIcon}
               />
               
               <Text style={styles.modalWinnerTitle}>
-                {winner === 1 
+                {winner === 0 
+                  ? 'Match Drawn!' 
+                  : winner === 1 
                   ? 'Victory!' 
                   : (mode === 'VS_BOT' ? 'Defeat!' : 'Player 2 Wins!')}
               </Text>
               
               <Text style={styles.modalWinnerSubtitle}>
-                {winner === 1
+                {winner === 0 
+                  ? 'The 50-move limit was reached with equal piece weightage.' 
+                  : movesCount >= 50 
+                  ? `50-move limit reached! Won by piece weightage.` 
+                  : winner === 1
                   ? 'You have captured all enemy pieces!'
                   : (mode === 'VS_BOT' ? 'The AI Bot has cleared your pieces.' : 'Player 2 captured all enemy pieces.')}
               </Text>
@@ -225,7 +345,7 @@ export default function GameScreen() {
               <TouchableOpacity
                 style={[
                   styles.modalActionBtn,
-                  { backgroundColor: winner === 1 ? COLORS.player1.primary : COLORS.player2.primary }
+                  { backgroundColor: winner === 0 ? '#4B5563' : winner === 1 ? COLORS.player1.primary : COLORS.player2.primary }
                 ]}
                 onPress={restartGame}
                 activeOpacity={0.8}
@@ -259,7 +379,7 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: 3,
     justifyContent: 'space-between',
     paddingBottom: Platform.OS === 'ios' ? 10 : 20,
   },
@@ -310,6 +430,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.textMuted,
     fontStyle: 'italic',
+  },
+  capturedMiniPiece: {
+    borderWidth: 1.8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  capturedMiniInnerRing: {
+    borderWidth: 1,
+    borderStyle: 'solid',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  capturedMiniText: {
+    fontWeight: 'bold',
+    textAlign: 'center',
+    ...Platform.select({
+      ios: { fontFamily: 'System' },
+      android: { fontFamily: 'serif' },
+    }),
   },
   turnBanner: {
     flexDirection: 'row',

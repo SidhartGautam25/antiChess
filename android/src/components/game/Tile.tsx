@@ -27,51 +27,50 @@ export default function Tile({
       case 1:
         return {
           bgColor: COLORS.tile1,
-          glowColor: COLORS.glow1 + '40', // 25% opacity
-          labelColor: COLORS.glow1 + '30',
+          glowColor: COLORS.glow1,
+          labelColor: COLORS.labelDark,
         };
       case 2:
         return {
           bgColor: COLORS.tile2,
-          glowColor: COLORS.glow2 + '50', // 30% opacity
-          labelColor: COLORS.glow2 + '35',
+          glowColor: COLORS.glow2,
+          labelColor: COLORS.labelDark,
         };
       case 3:
       default:
         return {
           bgColor: COLORS.tile3,
-          glowColor: COLORS.glow3 + '60', // 37% opacity
-          labelColor: COLORS.glow3 + '40',
+          glowColor: COLORS.glow3,
+          labelColor: COLORS.labelLight,
         };
     }
   };
 
   const { bgColor, glowColor, labelColor } = getTileStyles();
 
-  // Dynamically calculate styling based on selection and move targets
-  let finalBgColor = bgColor;
+  // Dynamically calculate borders and text color
   let finalBorderColor = glowColor;
   let finalBorderWidth = 1.5;
   let finalLabelColor = labelColor;
 
   if (isLegalTarget) {
     if (isEnemyOccupied) {
-      finalBgColor = COLORS.captureMove + '26'; // ~15% opacity red background
       finalBorderColor = COLORS.captureMove;
       finalBorderWidth = 2.5;
-      finalLabelColor = COLORS.textPrimary; // White number to be fully readable
+      finalLabelColor = COLORS.textPrimary; // White label for red captures
     } else {
-      finalBgColor = COLORS.legalMove + '1A'; // ~10% opacity green background
       finalBorderColor = COLORS.legalMove;
-      finalBorderWidth = 2.0;
-      finalLabelColor = COLORS.textPrimary; // White number to be fully readable
+      finalBorderWidth = 2.2;
+      // For legal moves, keep labelColor as is since the background is still light
     }
   }
 
   if (isSelected) {
     finalBorderColor = COLORS.selected;
     finalBorderWidth = 2.5;
-    finalLabelColor = COLORS.selected;
+    if (value === 3) {
+      finalLabelColor = COLORS.selected;
+    }
   }
 
   return (
@@ -79,7 +78,7 @@ export default function Tile({
       style={[
         styles.tile,
         {
-          backgroundColor: finalBgColor,
+          backgroundColor: bgColor, // Keep the solid wood tone as base
           borderColor: finalBorderColor,
           borderWidth: finalBorderWidth,
         },
@@ -88,18 +87,32 @@ export default function Tile({
       onPress={onPress}
       activeOpacity={0.8}
     >
-      {/* Background cell value number (always fully visible and centered) */}
+      {/* Background tint overlay (blended above base color, behind text) */}
+      {isLegalTarget && (
+        <View 
+          style={[
+            styles.overlayTint,
+            {
+              backgroundColor: isEnemyOccupied 
+                ? 'rgba(255, 69, 58, 0.28)' // Crimson red overlay
+                : 'rgba(255, 179, 0, 0.26)'  // Warm bright amber gold overlay (highly visible)
+            }
+          ]}
+        />
+      )}
+
+      {/* Cell value number (rendered on top of the overlay) */}
       <Text style={[styles.valueLabel, { color: finalLabelColor }]}>{value}</Text>
 
-      {/* Subtle corner indicator dot to signal target destination */}
-      {isLegalTarget && (
+      {/* Capture lock-on target reticle */}
+      {isLegalTarget && isEnemyOccupied && (
+        <View style={styles.captureTargetRing} />
+      )}
+
+      {/* Subtle corner indicator dot for normal legal moves */}
+      {isLegalTarget && !isEnemyOccupied && (
         <View style={styles.cornerIndicatorContainer}>
-          <View 
-            style={[
-              styles.cornerIndicator, 
-              { backgroundColor: isEnemyOccupied ? COLORS.captureMove : COLORS.legalMove }
-            ]} 
-          />
+          <View style={styles.cornerIndicator} />
         </View>
       )}
     </TouchableOpacity>
@@ -110,8 +123,8 @@ const styles = StyleSheet.create({
   tile: {
     flex: 1,
     aspectRatio: 1,
-    margin: 3,
-    borderRadius: 8,
+    margin: 1.5, // Reduced from 3 to sit closer
+    borderRadius: 4, // Reduced from 8 for classic tiled board appearance
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
@@ -123,22 +136,41 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 8,
   },
+  overlayTint: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 1,
+  },
   valueLabel: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '900',
+    zIndex: 5, // Render above the overlay tint
+  },
+  captureTargetRing: {
+    position: 'absolute',
+    top: 2,
+    bottom: 2,
+    left: 2,
+    right: 2,
+    borderRadius: 3,
+    borderWidth: 2,
+    borderColor: COLORS.captureMove,
+    borderStyle: 'dashed',
+    zIndex: 6,
   },
   cornerIndicatorContainer: {
     position: 'absolute',
-    top: 6,
-    right: 6,
+    top: 4,
+    right: 4,
     zIndex: 10,
   },
   cornerIndicator: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    shadowOpacity: 0.8,
-    shadowRadius: 2,
-    elevation: 2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.legalMove,
+    shadowColor: COLORS.legalMove,
+    shadowOpacity: 0.6,
+    shadowRadius: 1,
+    elevation: 1,
   },
 });

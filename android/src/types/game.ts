@@ -3,6 +3,7 @@ export type Player = 1 | 2; // 1 = Player 1 (Bottom/Human), 2 = Player 2 (Top/Bo
 export enum PieceType {
   SCOUT = 'SCOUT', // Moves EXACTLY N steps
   RIDER = 'RIDER', // Moves UP TO N steps
+  JUMPER = 'JUMPER', // Moves EXACTLY N steps in L-shape
 }
 
 export interface Position {
@@ -41,7 +42,7 @@ export interface GameHistoryItem {
   id: string;
   mode: GameMode;
   level?: number;
-  winner: Player;
+  winner: Player | 0;
   movesCount: number;
   duration: number; // in seconds
   timestamp: number; // epoch milliseconds

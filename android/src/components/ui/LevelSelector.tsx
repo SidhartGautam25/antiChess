@@ -52,7 +52,7 @@ export default function LevelSelector({ selectedLevel, onSelectLevel }: LevelSel
               <View style={styles.textContainer}>
                 <Text style={styles.levelName}>{config.name}</Text>
                 <Text style={styles.subtext}>
-                  Depth: {config.depth} • Blunder: {Math.round(config.blunderRate * 100)}%
+                  Difficulty: {config.level <= 3 ? 'Easy' : config.level <= 6 ? 'Medium' : config.level <= 8 ? 'Hard' : 'Extreme'}
                 </Text>
               </View>
             </TouchableOpacity>

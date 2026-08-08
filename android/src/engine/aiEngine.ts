@@ -17,32 +17,43 @@ export function evaluateBoard(pieces: Piece[], config: LevelConfig): number {
   
   let score = 0;
   
-  const RIDER_VAL = 150;
+  const RIDER_VAL = 300;
+  const JUMPER_VAL = 200;
   const SCOUT_VAL = 100;
+
+  const getPieceValue = (type: PieceType) => {
+    if (type === PieceType.RIDER) return RIDER_VAL;
+    if (type === PieceType.JUMPER) return JUMPER_VAL;
+    return SCOUT_VAL;
+  };
   
   // 1. Material & Positional Evaluation for Player 2 (AI)
   for (const piece of p2Pieces) {
-    const val = piece.type === PieceType.RIDER ? RIDER_VAL : SCOUT_VAL;
+    const val = getPieceValue(piece.type);
     score += val;
     
     // Position weight based on current tile value N
     const tileVal = FIXED_BOARD[piece.position.row][piece.position.col];
     score += tileVal * config.positionWeight;
     
-    // Centrality: reward pieces for occupying center coordinates
-    const distToCenter = Math.abs(piece.position.row - 3) + Math.abs(piece.position.col - 3);
-    score += (6 - distToCenter) * 4; // Max bonus = 24 (at 3,3), min bonus = 0
+    // Centrality: reward pieces for occupying center 2x2 quadrant (rows/cols 3 and 4)
+    const rowDist = Math.min(Math.abs(piece.position.row - 3), Math.abs(piece.position.row - 4));
+    const colDist = Math.min(Math.abs(piece.position.col - 3), Math.abs(piece.position.col - 4));
+    const distToCenter = rowDist + colDist;
+    score += (6 - distToCenter) * 4; // Max bonus = 24 (at center), min bonus = 0
   }
   
   // 2. Material & Positional Evaluation for Player 1 (Human)
   for (const piece of p1Pieces) {
-    const val = piece.type === PieceType.RIDER ? RIDER_VAL : SCOUT_VAL;
+    const val = getPieceValue(piece.type);
     score -= val;
     
     const tileVal = FIXED_BOARD[piece.position.row][piece.position.col];
     score -= tileVal * config.positionWeight;
     
-    const distToCenter = Math.abs(piece.position.row - 3) + Math.abs(piece.position.col - 3);
+    const rowDist = Math.min(Math.abs(piece.position.row - 3), Math.abs(piece.position.row - 4));
+    const colDist = Math.min(Math.abs(piece.position.col - 3), Math.abs(piece.position.col - 4));
+    const distToCenter = rowDist + colDist;
     score -= (6 - distToCenter) * 4;
   }
   
@@ -60,7 +71,7 @@ export function evaluateBoard(pieces: Piece[], config: LevelConfig): number {
       (p) => p.position.row === move.to.row && p.position.col === move.to.col
     );
     if (targetPiece) {
-      const pieceVal = targetPiece.type === PieceType.RIDER ? RIDER_VAL : SCOUT_VAL;
+      const pieceVal = getPieceValue(targetPiece.type);
       score -= pieceVal * config.safetyWeight;
     }
   }
@@ -71,7 +82,7 @@ export function evaluateBoard(pieces: Piece[], config: LevelConfig): number {
       (p) => p.position.row === move.to.row && p.position.col === move.to.col
     );
     if (targetPiece) {
-      const pieceVal = targetPiece.type === PieceType.RIDER ? RIDER_VAL : SCOUT_VAL;
+      const pieceVal = getPieceValue(targetPiece.type);
       score += pieceVal * config.aggressionWeight;
     }
   }
