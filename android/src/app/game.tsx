@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, Modal, Platform, SafeAreaView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/colors';
 import { useGameHistory } from '../hooks/useGameHistory';
 import { useGameSession } from '../hooks/useGameSession';
@@ -13,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 export default function GameScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
   
   // Parse parameters from route
   const mode = (params.mode as GameMode) || 'VS_BOT';
@@ -262,7 +264,7 @@ export default function GameScreen() {
         </View>
 
         {/* Controller Panel */}
-        <View style={styles.controlPanel}>
+        <View style={[styles.controlPanel, { marginBottom: Math.max(insets.bottom, 16) }]}>
           <TouchableOpacity
             style={[styles.controlButton, !canUndo && styles.controlButtonDisabled]}
             onPress={undoMove}

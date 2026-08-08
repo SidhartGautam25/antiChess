@@ -55,8 +55,6 @@ export default function AnimatedPiece({ piece, cellWidth, isSelected, onPress }:
         { translateX: x.value },
         { translateY: y.value },
       ],
-      width: pieceSize,
-      height: pieceSize,
     };
   });
 
@@ -86,7 +84,7 @@ export default function AnimatedPiece({ piece, cellWidth, isSelected, onPress }:
   // Render Jumper (Octagon) using two overlapping squares rotated relative to each other by 45deg
   if (isJumper) {
     return (
-      <Animated.View style={[styles.animatedContainer, animatedStyle]}>
+      <Animated.View style={[styles.animatedContainer, animatedStyle, { width: pieceSize, height: pieceSize }]}>
         <Pressable 
           style={styles.pressable} 
           onPress={onPress}
@@ -101,13 +99,9 @@ export default function AnimatedPiece({ piece, cellWidth, isSelected, onPress }:
                   position: 'absolute',
                   width: pieceSize,
                   height: pieceSize,
-                  borderColor: playerColors.primary,
+                  borderColor: isSelected ? COLORS.selected : playerColors.primary,
                   backgroundColor: playerColors.secondary,
                   borderRadius: pieceSize * 0.20,
-                },
-                isSelected && {
-                  borderWidth: 3.5,
-                  borderColor: COLORS.selected,
                 }
               ]}
             />
@@ -119,14 +113,10 @@ export default function AnimatedPiece({ piece, cellWidth, isSelected, onPress }:
                   position: 'absolute',
                   width: pieceSize,
                   height: pieceSize,
-                  borderColor: playerColors.primary,
+                  borderColor: isSelected ? COLORS.selected : playerColors.primary,
                   backgroundColor: playerColors.secondary,
                   borderRadius: pieceSize * 0.20,
                   transform: [{ rotate: '45deg' }],
-                },
-                isSelected && {
-                  borderWidth: 3.5,
-                  borderColor: COLORS.selected,
                 }
               ]}
             />
@@ -165,7 +155,7 @@ export default function AnimatedPiece({ piece, cellWidth, isSelected, onPress }:
   }
 
   return (
-    <Animated.View style={[styles.animatedContainer, animatedStyle]}>
+    <Animated.View style={[styles.animatedContainer, animatedStyle, { width: pieceSize, height: pieceSize }]}>
       <Pressable 
         style={styles.pressable} 
         onPress={onPress}
@@ -176,14 +166,10 @@ export default function AnimatedPiece({ piece, cellWidth, isSelected, onPress }:
             styles.goti,
             gotiShapeStyle,
             {
-              borderColor: playerColors.primary,
+              borderColor: isSelected ? COLORS.selected : playerColors.primary,
               backgroundColor: playerColors.secondary,
               width: pieceSize,
               height: pieceSize,
-            },
-            isSelected && {
-              borderWidth: 3.5,
-              borderColor: COLORS.selected,
             }
           ]}
         >
@@ -232,7 +218,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   goti: {
-    borderWidth: 2.5,
+    borderWidth: 3,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -251,3 +237,4 @@ const styles = StyleSheet.create({
     }),
   },
 });
+
