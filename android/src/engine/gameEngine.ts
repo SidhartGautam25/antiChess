@@ -136,6 +136,54 @@ export function getLegalMoves(piece: Piece, pieces: Piece[]): Position[] {
         }
       }
     }
+  } else if (piece.type === PieceType.JUMPER) {
+    // JUMPER: Moves EXACTLY N steps in either an L-shape/Knight-path OR straight orthogonally (jumps over intervening pieces; no diagonal path)
+    let possibleDisplacements: { dr: number; dc: number }[] = [];
+    if (N === 3) {
+      possibleDisplacements = [
+        // L-move (2 + 1)
+        { dr: 2, dc: 1 }, { dr: 2, dc: -1 }, { dr: -2, dc: 1 }, { dr: -2, dc: -1 },
+        { dr: 1, dc: 2 }, { dr: 1, dc: -2 }, { dr: -1, dc: 2 }, { dr: -1, dc: -2 },
+        // Straight (3 orthogonal only)
+        { dr: 3, dc: 0 }, { dr: -3, dc: 0 }, { dr: 0, dc: 3 }, { dr: 0, dc: -3 }
+      ];
+    } else if (N === 2) {
+      possibleDisplacements = [
+        // L-move (1 + 1)
+        { dr: 1, dc: 1 }, { dr: 1, dc: -1 }, { dr: -1, dc: 1 }, { dr: -1, dc: -1 },
+        // Straight (2 orthogonal only)
+        { dr: 2, dc: 0 }, { dr: -2, dc: 0 }, { dr: 0, dc: 2 }, { dr: 0, dc: -2 }
+      ];
+    } else if (N === 1) {
+      possibleDisplacements = [
+        // 1-step orthogonal only
+        { dr: 1, dc: 0 }, { dr: -1, dc: 0 }, { dr: 0, dc: 1 }, { dr: 0, dc: -1 }
+      ];
+    }
+
+    for (const offset of possibleDisplacements) {
+      const targetRow = startRow + offset.dr;
+      const targetCol = startCol + offset.dc;
+
+      if (!isValidSquare(targetRow, targetCol)) {
+        continue;
+      }
+
+      const pieceAtTarget = pieces.find(
+        (p) => p.position.row === targetRow && p.position.col === targetCol
+      );
+
+      if (pieceAtTarget) {
+        if (pieceAtTarget.player !== piece.player) {
+          // Can capture opponent
+          legalMoves.push({ row: targetRow, col: targetCol });
+        }
+        // Cannot land on own piece
+      } else {
+        // Can land on empty square
+        legalMoves.push({ row: targetRow, col: targetCol });
+      }
+    }
   }
   
   return legalMoves;

@@ -24,7 +24,9 @@ export default function GameBoard({
   onTileClick,
 }: GameBoardProps) {
   const [boardWidth, setBoardWidth] = useState<number>(0);
-  const cellWidth = boardWidth / BOARD_SIZE;
+  
+  // Calculate cellWidth based on the grid area (subtracting 4px borders and 4px paddings = 8px total)
+  const cellWidth = boardWidth > 0 ? (boardWidth - 8) / BOARD_SIZE : 0;
 
   const handleLayout = (event: LayoutChangeEvent) => {
     const { width } = event.nativeEvent.layout;
@@ -85,7 +87,7 @@ export default function GameBoard({
           {renderTiles()}
         </View>
 
-        {/* Overlay the animated pieces once board width is measured */}
+        {/* Overlay the animated pieces relative to the boardContainer (which starts inside the border) */}
         {boardWidth > 0 && pieces.map((piece) => {
           const isSelected = selectedPieceId === piece.id;
           
@@ -108,7 +110,7 @@ const styles = StyleSheet.create({
   wrapper: {
     width: '100%',
     aspectRatio: 1,
-    padding: 8,
+    padding: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -129,7 +131,7 @@ const styles = StyleSheet.create({
   },
   gridContainer: {
     flex: 1,
-    padding: 3,
+    padding: 2, // Reduced padding from 3 to 2
   },
   row: {
     flex: 1,

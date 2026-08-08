@@ -1,55 +1,55 @@
 export const COLORS = {
   // Base colors
-  background: '#090D16',
-  surface: '#151E33',
-  surfaceSecondary: '#1E2942',
-  border: '#2E3F5F',
+  background: '#121214', // Rich dark obsidian/charcoal
+  surface: '#1E1E22', // Slate surface
+  surfaceSecondary: '#282830',
+  border: '#33333C',
   
   // Text colors
-  textPrimary: '#F8FAFC',
-  textSecondary: '#94A3B8',
-  textMuted: '#64748B',
+  textPrimary: '#F5F5F7', // Off-white
+  textSecondary: '#A0A0AA', 
+  textMuted: '#666670',
   
-  // Neon accents
-  accentBlue: '#00F5D4', // Cyan
-  accentPink: '#FF006E', // Hot Pink
-  accentAmber: '#FF9F1C', // Amber Gold
-  accentGreen: '#3A0CA3', // Purple deep
+  // Accent colors
+  accentBlue: '#D4AF37', // Polished brass gold
+  accentPink: '#A33B49', // Deep Burgundy
+  accentAmber: '#FFCC00', // Polished bright amber gold
   
-  // Board/Tile colors
-  tile1: '#131A2E',
-  tile2: '#1F1A3E',
-  tile3: '#2D163D',
+  // Board/Tile colors (High-contrast Matte wood/stone tones)
+  tile1: '#F4F0E6', // Light Ash Wood
+  tile2: '#E3D5C1', // Honey Oak Wood
+  tile3: '#9E8875', // Dark Walnut Wood
   
-  // Border glows
-  glow1: '#38BDF8', // Light Blue glow
-  glow2: '#818CF8', // Indigo glow
-  glow3: '#EC4899', // Pink glow
+  // Labels (Charcoal for light tiles, Cream for dark tiles)
+  labelDark: '#221F1D', 
+  labelLight: '#FAF8F5',
   
-  // Player specific colors
+  // Border glows (Muted classic shades)
+  glow1: '#D4C9B5', 
+  glow2: '#BBA891', 
+  glow3: '#7A6655', 
+  
+  // Player specific colors (Ivory/Gold vs Ebony/Silver)
   player1: {
-    primary: '#00F5D4',
-    secondary: '#00BBF9',
-    glow: '#00F5D480',
-    name: 'Player 1',
+    primary: '#FFFFFF', // Pure White border
+    secondary: '#F59E0B', // Solid Sun Yellow / Amber fill
+    glow: 'rgba(245, 158, 11, 0.4)',
   },
   player2: {
-    primary: '#FF006E',
-    secondary: '#FF5400',
-    glow: '#FF006E80',
-    name: 'Player 2',
+    primary: '#1F2937', // Obsidian Dark Charcoal border
+    secondary: '#E11D48', // Bright Crimson Red fill
+    glow: 'rgba(225, 29, 72, 0.4)',
   },
   bot: {
-    primary: '#8B5CF6',
-    secondary: '#D946EF',
-    glow: '#8B5CF680',
-    name: 'AI Bot',
+    primary: '#1F2937', // Obsidian Dark Charcoal border
+    secondary: '#E11D48', // Bright Crimson Red fill
+    glow: 'rgba(225, 29, 72, 0.4)',
   },
   
   // Overlay & interaction
-  selected: '#FF9F1C',
-  legalMove: '#10B981',
-  legalMoveDot: '#10B981CC',
-  captureMove: '#EF4444',
-  overlayBg: 'rgba(9, 13, 22, 0.85)',
+  selected: '#FFCC00', // Polished gold selection
+  legalMove: '#FFB300', // Bright high-visibility amber gold
+  legalMoveDot: '#FFB300',
+  captureMove: '#FF453A', // Vibrant red for captures
+  overlayBg: 'rgba(18, 18, 20, 0.95)',
 };
