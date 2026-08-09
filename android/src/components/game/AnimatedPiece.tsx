@@ -33,21 +33,41 @@ export default function AnimatedPiece({ piece, cellWidth, isSelected, onPress }:
   // accounts for 2px gridContainer padding, 1.5px tile margin, and centers piece within tileInnerWidth
   const centeringOffset = 2 + (cellWidth - pieceSize) / 2;
 
+  // Refs to track the previous position for triggering slide animations
+  const prevRow = React.useRef(piece.position.row);
+  const prevCol = React.useRef(piece.position.col);
+
   // Shared values for coordinates
   const x = useSharedValue(piece.position.col * cellWidth + centeringOffset);
   const y = useSharedValue(piece.position.row * cellWidth + centeringOffset);
 
   // Update animated coordinates when grid position or cell size changes
   useEffect(() => {
-    x.value = withTiming(piece.position.col * cellWidth + centeringOffset, {
-      duration: 400,
-      easing: Easing.out(Easing.quad),
-    });
-    y.value = withTiming(piece.position.row * cellWidth + centeringOffset, {
-      duration: 400,
-      easing: Easing.out(Easing.quad),
-    });
-  }, [piece.position.row, piece.position.col, cellWidth, pieceSize, centeringOffset, x, y]);
+    const targetX = piece.position.col * cellWidth + centeringOffset;
+    const targetY = piece.position.row * cellWidth + centeringOffset;
+
+    // Check if the piece moved to a different tile
+    const positionChanged = prevRow.current !== piece.position.row || prevCol.current !== piece.position.col;
+
+    if (positionChanged) {
+      // Animate transition when moving to a new cell
+      x.value = withTiming(targetX, {
+        duration: 400,
+        easing: Easing.out(Easing.quad),
+      });
+      y.value = withTiming(targetY, {
+        duration: 400,
+        easing: Easing.out(Easing.quad),
+      });
+    } else {
+      // Snap instantly on first render or when layout changes (e.g. device rotation/resizing)
+      x.value = targetX;
+      y.value = targetY;
+    }
+
+    prevRow.current = piece.position.row;
+    prevCol.current = piece.position.col;
+  }, [piece.position.row, piece.position.col, cellWidth, centeringOffset, x, y]);
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
@@ -84,7 +104,10 @@ export default function AnimatedPiece({ piece, cellWidth, isSelected, onPress }:
   // Render Jumper (Octagon) using two overlapping squares rotated relative to each other by 45deg
   if (isJumper) {
     return (
-      <Animated.View style={[styles.animatedContainer, animatedStyle, { width: pieceSize, height: pieceSize }]}>
+      <Animated.View 
+        collapsable={false}
+        style={[styles.animatedContainer, animatedStyle, { width: pieceSize, height: pieceSize }]}
+      >
         <Pressable 
           style={styles.pressable} 
           onPress={onPress}
@@ -155,7 +178,10 @@ export default function AnimatedPiece({ piece, cellWidth, isSelected, onPress }:
   }
 
   return (
-    <Animated.View style={[styles.animatedContainer, animatedStyle, { width: pieceSize, height: pieceSize }]}>
+    <Animated.View 
+      collapsable={false}
+      style={[styles.animatedContainer, animatedStyle, { width: pieceSize, height: pieceSize }]}
+    >
       <Pressable 
         style={styles.pressable} 
         onPress={onPress}
@@ -210,6 +236,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     zIndex: 50,
+    elevation: 50,
   },
   pressable: {
     width: '100%',

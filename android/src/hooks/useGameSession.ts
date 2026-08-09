@@ -35,9 +35,23 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
   }>>([]);
 
   const startTimeRef = useRef<number>(Date.now());
+  const botTimeoutRef = useRef<any>(null);
+
+  // Clear timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (botTimeoutRef.current) {
+        clearTimeout(botTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Restart/reset game state
   const restartGame = useCallback(() => {
+    if (botTimeoutRef.current) {
+      clearTimeout(botTimeoutRef.current);
+      botTimeoutRef.current = null;
+    }
     setPieces(INITIAL_PIECES);
     setActivePlayer(1);
     setSelectedPieceId(null);
@@ -50,6 +64,10 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
 
   // Update game settings and restart
   const changeSettings = useCallback((newMode: GameMode, newLevel: number) => {
+    if (botTimeoutRef.current) {
+      clearTimeout(botTimeoutRef.current);
+      botTimeoutRef.current = null;
+    }
     setGameMode(newMode);
     setLevel(newLevel);
     // Restart with new settings
@@ -83,26 +101,6 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
     const nextMovesCount = movesCount + 1;
     let gameWinner: Player | 0 | null = checkWinCondition(nextPieces);
 
-    // If no board-clear winner, check the 50-move limit
-    if (gameWinner === null && nextMovesCount >= 50) {
-      const getWeight = (plist: Piece[]) => plist.reduce((acc, p) => {
-        if (p.type === PieceType.RIDER) return acc + 3;
-        if (p.type === PieceType.JUMPER) return acc + 2;
-        return acc + 1;
-      }, 0);
-      
-      const p1Weight = getWeight(nextPieces.filter(p => p.player === 1));
-      const p2Weight = getWeight(nextPieces.filter(p => p.player === 2));
-      
-      if (p1Weight > p2Weight) {
-        gameWinner = 1;
-      } else if (p2Weight > p1Weight) {
-        gameWinner = 2;
-      } else {
-        gameWinner = 0; // Draw
-      }
-    }
-
     setPieces(nextPieces);
     setMovesCount(nextMovesCount);
     setSelectedPieceId(null);
@@ -118,8 +116,72 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
         duration: Math.max(1, duration),
       });
     } else {
-      // Toggle player turn
-      setActivePlayer(activePlayer === 1 ? 2 : 1);
+      if (gameMode === 'VS_BOT') {
+        setActivePlayer(2);
+        setIsBotThinking(true);
+
+        botTimeoutRef.current = setTimeout(() => {
+          try {
+            const botMove = getBotMoveForLevel(level, nextPieces);
+            
+            if (botMove) {
+              // Save history prior to bot's move
+              setHistoryStack((prev) => [...prev, { pieces: nextPieces, activePlayer: 2, movesCount: nextMovesCount }]);
+
+              const botPiece = nextPieces.find((p) => p.id === botMove.pieceId);
+              if (botPiece) {
+                const botNextPieces = simulateMove(nextPieces, botPiece, botMove.to);
+                const botNextMovesCount = nextMovesCount + 1;
+                let botWinner: Player | 0 | null = checkWinCondition(botNextPieces);
+
+                // Check for 50-move limit
+                if (botWinner === null && botNextMovesCount >= 50) {
+                  const getWeight = (plist: Piece[]) => plist.reduce((acc, p) => {
+                    if (p.type === PieceType.RIDER) return acc + 3;
+                    if (p.type === PieceType.JUMPER) return acc + 2;
+                    return acc + 1;
+                  }, 0);
+                  
+                  const p1Weight = getWeight(botNextPieces.filter(p => p.player === 1));
+                  const p2Weight = getWeight(botNextPieces.filter(p => p.player === 2));
+                  
+                  if (p1Weight > p2Weight) {
+                    botWinner = 1;
+                  } else if (p2Weight > p1Weight) {
+                    botWinner = 2;
+                  } else {
+                    botWinner = 0; // Draw
+                  }
+                }
+
+                setPieces(botNextPieces);
+                setMovesCount(botNextMovesCount);
+
+                if (botWinner !== null) {
+                  setWinner(botWinner);
+                  const duration = Math.round((Date.now() - startTimeRef.current) / 1000);
+                  onSaveMatch({
+                    mode: gameMode,
+                    level,
+                    winner: botWinner,
+                    movesCount: botNextMovesCount,
+                    duration: Math.max(1, duration),
+                  });
+                } else {
+                  setActivePlayer(1);
+                }
+              }
+            }
+          } catch (err) {
+            console.error('Error during AI execution:', err);
+          } finally {
+            setIsBotThinking(false);
+          }
+        }, 600);
+      } else {
+        // Toggle player turn (Pass & Play mode)
+        setActivePlayer(activePlayer === 1 ? 2 : 1);
+      }
     }
   }, [pieces, activePlayer, movesCount, winner, isBotThinking, gameMode, level, onSaveMatch]);
 
@@ -181,73 +243,7 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
     setWinner(null); // Reset winner state in case they undid a victory move
   }, [historyStack, gameMode, isBotThinking]);
 
-  // Trigger bot move automatically when it's Player 2's turn in VS_BOT mode
-  useEffect(() => {
-    if (gameMode !== 'VS_BOT' || activePlayer !== 2 || winner || isBotThinking) return;
 
-    setIsBotThinking(true);
-
-    const timer = setTimeout(() => {
-      try {
-        const botMove = getBotMoveForLevel(level, pieces);
-        
-        if (botMove) {
-          // Save history prior to bot's move
-          setHistoryStack((prev) => [...prev, { pieces, activePlayer, movesCount }]);
-
-          const botPiece = pieces.find((p) => p.id === botMove.pieceId);
-          if (botPiece) {
-            const nextPieces = simulateMove(pieces, botPiece, botMove.to);
-            const nextMovesCount = movesCount + 1;
-            let gameWinner: Player | 0 | null = checkWinCondition(nextPieces);
-
-            // Check for 50-move limit
-            if (gameWinner === null && nextMovesCount >= 50) {
-              const getWeight = (plist: Piece[]) => plist.reduce((acc, p) => {
-                if (p.type === PieceType.RIDER) return acc + 3;
-                if (p.type === PieceType.JUMPER) return acc + 2;
-                return acc + 1;
-              }, 0);
-              
-              const p1Weight = getWeight(nextPieces.filter(p => p.player === 1));
-              const p2Weight = getWeight(nextPieces.filter(p => p.player === 2));
-              
-              if (p1Weight > p2Weight) {
-                gameWinner = 1;
-              } else if (p2Weight > p1Weight) {
-                gameWinner = 2;
-              } else {
-                gameWinner = 0; // Draw
-              }
-            }
-
-            setPieces(nextPieces);
-            setMovesCount(nextMovesCount);
-
-            if (gameWinner !== null) {
-              setWinner(gameWinner);
-              const duration = Math.round((Date.now() - startTimeRef.current) / 1000);
-              onSaveMatch({
-                mode: gameMode,
-                level,
-                winner: gameWinner,
-                movesCount: nextMovesCount,
-                duration: Math.max(1, duration),
-              });
-            } else {
-              setActivePlayer(1);
-            }
-          }
-        }
-      } catch (err) {
-        console.error('Error during AI execution:', err);
-      } finally {
-        setIsBotThinking(false);
-      }
-    }, 600); // 600ms delay to simulate bot thinking and feel natural
-
-    return () => clearTimeout(timer);
-  }, [gameMode, activePlayer, winner, pieces, level, movesCount, onSaveMatch]);
 
   return {
     pieces,

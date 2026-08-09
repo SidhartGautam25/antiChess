@@ -1,33 +1,57 @@
 import React from 'react';
-import { StyleSheet, Text, View, ScrollView, Platform, SafeAreaView } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, Platform, Dimensions, StatusBar } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/colors';
 import HeaderBar from '../components/ui/HeaderBar';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function RulesScreen() {
+  const insets = useSafeAreaInsets();
+  const { height: screenHeight } = Dimensions.get('window');
+  const isShortScreen = screenHeight < 750;
+  const isThreeButton = insets.bottom >= 30;
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.screenContainer}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
+      <View style={{ height: insets.top, backgroundColor: COLORS.background }} />
+
       <HeaderBar title="Rules & Directions" />
       
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        contentContainerStyle={[
+          styles.scrollContent,
+          { 
+            paddingBottom: isThreeButton ? 24 : Math.max(insets.bottom, 16),
+            paddingHorizontal: isShortScreen ? 12 : 16,
+            paddingTop: isShortScreen ? 12 : 16,
+          }
+        ]} 
+        showsVerticalScrollIndicator={false}
+      >
         
         {/* Intro Hero Section */}
-        <View style={styles.heroSection}>
-          <Ionicons name="book-outline" size={48} color={COLORS.accentBlue} style={styles.heroIcon} />
-          <Text style={styles.mainTitle}>ANKA-CHAAL</Text>
-          <Text style={styles.subtitle}>"The Dance of Numbers"</Text>
-          <Text style={styles.introParagraph}>
+        <View style={[styles.heroSection, isShortScreen && { marginBottom: 12, paddingVertical: 8 }]}>
+          <Ionicons 
+            name="book-outline" 
+            size={isShortScreen ? 36 : 48} 
+            color={COLORS.accentBlue} 
+            style={[styles.heroIcon, isShortScreen && { marginBottom: 8 }]} 
+          />
+          <Text style={[styles.mainTitle, isShortScreen && { fontSize: 22 }]}>ANKA-CHAAL</Text>
+          <Text style={[styles.subtitle, isShortScreen && { fontSize: 12, marginBottom: 8 }]}>"The Dance of Numbers"</Text>
+          <Text style={[styles.introParagraph, isShortScreen && { fontSize: 12, lineHeight: 18 }]}>
             Welcome to <Text style={styles.boldText}>Anka-Chaal</Text> (meaning "The Move of Numbers") — a fast-paced, high-voltage tactical chess game played on an 8x8 grid. Unlike traditional chess where pieces have fixed movements, in Anka-Chaal, <Text style={styles.boldText}>the board itself dictates the speed of your army</Text>!
           </Text>
         </View>
 
         {/* Core Mechanic Card */}
-        <View style={styles.card}>
+        <View style={[styles.card, isShortScreen && { padding: 12, marginBottom: 12 }]}>
           <View style={styles.cardHeader}>
-            <Ionicons name="speedometer-outline" size={24} color={COLORS.accentBlue} />
-            <Text style={styles.cardTitle}>Dynamic Momentum (N)</Text>
+            <Ionicons name="speedometer-outline" size={isShortScreen ? 20 : 24} color={COLORS.accentBlue} />
+            <Text style={[styles.cardTitle, isShortScreen && { fontSize: 14 }]}>Dynamic Momentum (N)</Text>
           </View>
-          <Text style={styles.cardBody}>
+          <Text style={[styles.cardBody, isShortScreen && { fontSize: 12, lineHeight: 18 }]}>
             The number displayed inside each piece indicates its current momentum (<Text style={styles.boldText}>N</Text>), which changes dynamically as it steps across tiles of values <Text style={styles.boldText}>1, 2, or 3</Text>.
             {"\n\n"}
             Land on a <Text style={[styles.boldText, { color: COLORS.accentAmber }]}>3</Text>, and your piece gains speed; land on a <Text style={[styles.boldText, { color: COLORS.accentBlue }]}>1</Text>, and it slows to a tactical crawl. Use this momentum to outsmart and capture your opponent's forces!
@@ -35,26 +59,30 @@ export default function RulesScreen() {
         </View>
 
         {/* The Pieces Section */}
-        <Text style={styles.sectionTitle}>Meet Your Army (6 Pieces Per Side)</Text>
-        <Text style={styles.sectionSubtitle}>Each piece type has a unique movement style and point weight.</Text>
+        <Text style={[styles.sectionTitle, isShortScreen && { fontSize: 16, marginTop: 4, marginBottom: 2 }]}>Meet Your Army (6 Pieces Per Side)</Text>
+        <Text style={[styles.sectionSubtitle, isShortScreen && { fontSize: 11, marginBottom: 8 }]}>Each piece type has a unique movement style and point weight.</Text>
 
         {/* Piece 1: Rider */}
-        <View style={[styles.card, styles.pieceCard]}>
-          <View style={styles.pieceHeaderRow}>
+        <View style={[styles.card, styles.pieceCard, isShortScreen && { padding: 12, marginBottom: 12 }]}>
+          <View style={[styles.pieceHeaderRow, isShortScreen && { paddingBottom: 8, marginBottom: 8 }]}>
             <View style={styles.pieceIdentity}>
-              <View style={[styles.pieceIconBase, styles.riderIcon]}>
-                <Text style={styles.pieceLetter}>R</Text>
+              <View style={[
+                styles.pieceIconBase, 
+                styles.riderIcon,
+                isShortScreen && { width: 30, height: 30 }
+              ]}>
+                <Text style={[styles.pieceLetter, isShortScreen && { fontSize: 14 }]}>R</Text>
               </View>
               <View>
-                <Text style={styles.pieceName}>The Rider</Text>
-                <Text style={styles.pieceTypeTag}>Sliding Spearhead</Text>
+                <Text style={[styles.pieceName, isShortScreen && { fontSize: 14 }]}>The Rider</Text>
+                <Text style={[styles.pieceTypeTag, isShortScreen && { fontSize: 11 }]}>Sliding Spearhead</Text>
               </View>
             </View>
-            <View style={styles.weightBadge}>
-              <Text style={styles.weightText}>Weight: 3</Text>
+            <View style={[styles.weightBadge, isShortScreen && { paddingVertical: 2, paddingHorizontal: 8 }]}>
+              <Text style={[styles.weightText, isShortScreen && { fontSize: 11 }]}>Weight: 3</Text>
             </View>
           </View>
-          <Text style={styles.pieceDescription}>
+          <Text style={[styles.pieceDescription, isShortScreen && { fontSize: 12, lineHeight: 18 }]}>
             The sliding spearhead of your army. The Rider can slide along any of the 8 vectors (orthogonal or diagonal) <Text style={styles.boldText}>up to N steps</Text>.
             {"\n\n"}
             It can stop early or land on an enemy to capture them. However, it <Text style={styles.boldText}>cannot jump</Text> over obstacles and is blocked by any piece in its way.
@@ -62,22 +90,26 @@ export default function RulesScreen() {
         </View>
 
         {/* Piece 2: Jumper */}
-        <View style={[styles.card, styles.pieceCard]}>
-          <View style={styles.pieceHeaderRow}>
+        <View style={[styles.card, styles.pieceCard, isShortScreen && { padding: 12, marginBottom: 12 }]}>
+          <View style={[styles.pieceHeaderRow, isShortScreen && { paddingBottom: 8, marginBottom: 8 }]}>
             <View style={styles.pieceIdentity}>
-              <View style={[styles.pieceIconBase, styles.jumperIcon]}>
-                <Text style={styles.pieceLetter}>J</Text>
+              <View style={[
+                styles.pieceIconBase, 
+                styles.jumperIcon,
+                isShortScreen && { width: 30, height: 30 }
+              ]}>
+                <Text style={[styles.pieceLetter, isShortScreen && { fontSize: 14 }]}>J</Text>
               </View>
               <View>
-                <Text style={styles.pieceName}>The Jumper</Text>
-                <Text style={styles.pieceTypeTag}>Boundary-Breaker</Text>
+                <Text style={[styles.pieceName, isShortScreen && { fontSize: 14 }]}>The Jumper</Text>
+                <Text style={[styles.pieceTypeTag, isShortScreen && { fontSize: 11 }]}>Boundary-Breaker</Text>
               </View>
             </View>
-            <View style={styles.weightBadge}>
-              <Text style={styles.weightText}>Weight: 2</Text>
+            <View style={[styles.weightBadge, isShortScreen && { paddingVertical: 2, paddingHorizontal: 8 }]}>
+              <Text style={[styles.weightText, isShortScreen && { fontSize: 11 }]}>Weight: 2</Text>
             </View>
           </View>
-          <Text style={styles.pieceDescription}>
+          <Text style={[styles.pieceDescription, isShortScreen && { fontSize: 12, lineHeight: 18 }]}>
             The boundary-breaker! The Jumper moves <Text style={styles.boldText}>exactly N steps</Text> either in a Knight-like L-shape (e.g. 2 steps straight and 1 perpendicular when N=3) OR in a straight orthogonal direction.
             {"\n\n"}
             It <Text style={styles.boldText}>cannot move diagonally</Text> and it has <Text style={styles.boldText}>no obligation to turn</Text> (can go completely straight). Because it leaps over obstacles, it ignores intervening pieces, landing directly on its target square to capture.
@@ -85,22 +117,26 @@ export default function RulesScreen() {
         </View>
 
         {/* Piece 3: Scout */}
-        <View style={[styles.card, styles.pieceCard]}>
-          <View style={styles.pieceHeaderRow}>
+        <View style={[styles.card, styles.pieceCard, isShortScreen && { padding: 12, marginBottom: 12 }]}>
+          <View style={[styles.pieceHeaderRow, isShortScreen && { paddingBottom: 8, marginBottom: 8 }]}>
             <View style={styles.pieceIdentity}>
-              <View style={[styles.pieceIconBase, styles.scoutIcon]}>
-                <Text style={styles.pieceLetter}>S</Text>
+              <View style={[
+                styles.pieceIconBase, 
+                styles.scoutIcon,
+                isShortScreen && { width: 30, height: 30 }
+              ]}>
+                <Text style={[styles.pieceLetter, isShortScreen && { fontSize: 14 }]}>S</Text>
               </View>
               <View>
-                <Text style={styles.pieceName}>The Scout</Text>
-                <Text style={styles.pieceTypeTag}>Stealthy Sentinel</Text>
+                <Text style={[styles.pieceName, isShortScreen && { fontSize: 14 }]}>The Scout</Text>
+                <Text style={[styles.pieceTypeTag, isShortScreen && { fontSize: 11 }]}>Stealthy Sentinel</Text>
               </View>
             </View>
-            <View style={styles.weightBadge}>
-              <Text style={styles.weightText}>Weight: 1</Text>
+            <View style={[styles.weightBadge, isShortScreen && { paddingVertical: 2, paddingHorizontal: 8 }]}>
+              <Text style={[styles.weightText, isShortScreen && { fontSize: 11 }]}>Weight: 1</Text>
             </View>
           </View>
-          <Text style={styles.pieceDescription}>
+          <Text style={[styles.pieceDescription, isShortScreen && { fontSize: 12, lineHeight: 18 }]}>
             The stealthy sentinel. The Scout must travel <Text style={styles.boldText}>exactly N steps</Text> along any of the 8 vectors (orthogonal or diagonal).
             {"\n\n"}
             Unlike the Jumper, the Scout <Text style={styles.boldText}>cannot leap</Text>; if any piece is in its intermediate path, it is blocked. However, it can capture an opponent occupying its exact destination.
@@ -108,12 +144,12 @@ export default function RulesScreen() {
         </View>
 
         {/* Victory & Tiebreakers */}
-        <View style={[styles.card, { borderColor: COLORS.accentPink + '40' }]}>
+        <View style={[styles.card, { borderColor: COLORS.accentPink + '40' }, isShortScreen && { padding: 12, marginBottom: 12 }]}>
           <View style={styles.cardHeader}>
-            <Ionicons name="trophy-outline" size={24} color={COLORS.accentPink} />
-            <Text style={styles.cardTitle}>Victory Conditions</Text>
+            <Ionicons name="trophy-outline" size={isShortScreen ? 20 : 24} color={COLORS.accentPink} />
+            <Text style={[styles.cardTitle, isShortScreen && { fontSize: 14 }]}>Victory Conditions</Text>
           </View>
-          <Text style={styles.cardBody}>
+          <Text style={[styles.cardBody, isShortScreen && { fontSize: 12, lineHeight: 18 }]}>
             Your ultimate goal is to wipe out all 6 of the opponent's pieces.
             {"\n\n"}
             To keep matches intense and competitive, there is a strict limit of <Text style={styles.boldText}>50 moves</Text>. If the game reaches 50 moves, the player with the higher total weightage of remaining pieces on the board wins:
@@ -125,19 +161,19 @@ export default function RulesScreen() {
         </View>
 
       </ScrollView>
-    </SafeAreaView>
+      {isThreeButton && (
+        <View style={{ height: insets.bottom, backgroundColor: '#000000' }} />
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  screenContainer: {
     flex: 1,
     backgroundColor: COLORS.background,
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 40,
   },
   heroSection: {
     alignItems: 'center',
@@ -282,3 +318,4 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
+

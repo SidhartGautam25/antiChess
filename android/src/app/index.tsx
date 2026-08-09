@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Platform, SafeAreaView } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Platform, Dimensions, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/colors';
 import { useGameHistory } from '../hooks/useGameHistory';
 import LevelSelector from '../components/ui/LevelSelector';
@@ -9,9 +10,14 @@ import { Image } from 'expo-image';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<'VS_BOT' | 'PASS_AND_PLAY'>('VS_BOT');
   const [level, setLevel] = useState<number>(5); // Default is level 5: Strategist
   const { stats, loadHistory } = useGameHistory();
+
+  const { height: screenHeight } = Dimensions.get('window');
+  const isShortScreen = screenHeight < 750;
+  const isThreeButton = insets.bottom >= 30;
 
   // Reload history and stats when screen mounts
   useEffect(() => {
@@ -26,30 +32,47 @@ export default function HomeScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
+    <View style={styles.screenContainer}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
+      <View style={{ height: insets.top, backgroundColor: COLORS.background }} />
+      
+      <View style={[styles.container, { paddingHorizontal: isShortScreen ? 12 : 20 }]}>
         <ScrollView 
           nestedScrollEnabled={true}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.scrollContent} 
+          contentContainerStyle={[
+            styles.scrollContent,
+            { 
+              paddingTop: 12,
+              paddingBottom: isThreeButton ? 16 : Math.max(insets.bottom, 12) 
+            }
+          ]} 
           showsVerticalScrollIndicator={false}
         >
           
           {/* Premium Logo & Title Emblem */}
-          <View style={styles.header}>
-            <View style={styles.logoEmblem}>
+          <View style={[styles.header, isShortScreen && { marginBottom: 12 }]}>
+            <View style={[
+              styles.logoEmblem,
+              isShortScreen && {
+                width: 70,
+                height: 70,
+                borderRadius: 35,
+                marginBottom: 8,
+              }
+            ]}>
               <Image 
                 source={require('../../assets/images/game-logo.svg')} 
-                style={styles.logoImage} 
+                style={[styles.logoImage, isShortScreen && { width: 40, height: 40 }]} 
                 contentFit="contain"
               />
             </View>
-            <Text style={styles.logoText}>ANKA-CHAAL</Text>
-            <Text style={styles.tagline}>8x8 NUMBER-GRID TACTICAL CHESS</Text>
+            <Text style={[styles.logoText, isShortScreen && { fontSize: 24, letterSpacing: 2 }]}>ANKA-CHAAL</Text>
+            <Text style={[styles.tagline, isShortScreen && { fontSize: 9, marginTop: 3 }]}>8x8 NUMBER-GRID TACTICAL CHESS</Text>
           </View>
 
           {/* Sleek Game Settings Container Card */}
-          <View style={styles.settingsCard}>
+          <View style={[styles.settingsCard, isShortScreen && { padding: 12, marginBottom: 12 }]}>
             <Text style={styles.cardHeading}>GAME CONFIGURATION</Text>
             
             {/* Segmented Pill Selector for Game Mode */}
@@ -57,6 +80,7 @@ export default function HomeScreen() {
               <TouchableOpacity
                 style={[
                   styles.modeButton,
+                  isShortScreen && { height: 40 },
                   mode === 'VS_BOT' && { borderColor: COLORS.accentBlue, backgroundColor: COLORS.surfaceSecondary }
                 ]}
                 onPress={() => setMode('VS_BOT')}
@@ -64,10 +88,10 @@ export default function HomeScreen() {
               >
                 <Ionicons 
                   name="hardware-chip-outline" 
-                  size={20} 
+                  size={isShortScreen ? 16 : 20} 
                   color={mode === 'VS_BOT' ? COLORS.accentBlue : COLORS.textSecondary} 
                 />
-                <Text style={[styles.modeText, mode === 'VS_BOT' && { color: COLORS.textPrimary }]}>
+                <Text style={[styles.modeText, isShortScreen && { fontSize: 12 }, mode === 'VS_BOT' && { color: COLORS.textPrimary }]}>
                   VS AI Bot
                 </Text>
               </TouchableOpacity>
@@ -75,6 +99,7 @@ export default function HomeScreen() {
               <TouchableOpacity
                 style={[
                   styles.modeButton,
+                  isShortScreen && { height: 40 },
                   mode === 'PASS_AND_PLAY' && { borderColor: COLORS.accentPink, backgroundColor: COLORS.surfaceSecondary }
                 ]}
                 onPress={() => setMode('PASS_AND_PLAY')}
@@ -82,10 +107,10 @@ export default function HomeScreen() {
               >
                 <Ionicons 
                   name="people-outline" 
-                  size={20} 
+                  size={isShortScreen ? 16 : 20} 
                   color={mode === 'PASS_AND_PLAY' ? COLORS.accentPink : COLORS.textSecondary} 
                 />
-                <Text style={[styles.modeText, mode === 'PASS_AND_PLAY' && { color: COLORS.textPrimary }]}>
+                <Text style={[styles.modeText, isShortScreen && { fontSize: 12 }, mode === 'PASS_AND_PLAY' && { color: COLORS.textPrimary }]}>
                   Pass & Play
                 </Text>
               </TouchableOpacity>
@@ -97,9 +122,9 @@ export default function HomeScreen() {
                 <LevelSelector selectedLevel={level} onSelectLevel={setLevel} />
               </View>
             ) : (
-              <View style={styles.modeInfoBox}>
-                <Ionicons name="information-circle-outline" size={20} color={COLORS.accentPink} />
-                <Text style={styles.modeInfoText}>
+              <View style={[styles.modeInfoBox, isShortScreen && { padding: 10, marginTop: 8 }]}>
+                <Ionicons name="information-circle-outline" size={isShortScreen ? 16 : 20} color={COLORS.accentPink} />
+                <Text style={[styles.modeInfoText, isShortScreen && { fontSize: 11, lineHeight: 15 }]}>
                   Pass & Play allows two players to play locally on this device. Take turns moving your pieces.
                 </Text>
               </View>
@@ -110,33 +135,34 @@ export default function HomeScreen() {
           <TouchableOpacity 
             style={[
               styles.startButton,
+              isShortScreen && { height: 48, marginBottom: 16 },
               { backgroundColor: COLORS.accentAmber }
             ]}
             onPress={handleStartGame}
             activeOpacity={0.8}
           >
-            <Text style={styles.startButtonText}>PLAY GAME</Text>
-            <Ionicons name="play-forward" size={20} color={COLORS.background} />
+            <Text style={[styles.startButtonText, isShortScreen && { fontSize: 16 }]}>PLAY GAME</Text>
+            <Ionicons name="play-forward" size={isShortScreen ? 16 : 20} color={COLORS.background} />
           </TouchableOpacity>
 
           {/* Quick Statistics Capsule */}
           {stats && stats.totalGames > 0 && (
-            <View style={styles.statsBanner}>
+            <View style={[styles.statsBanner, isShortScreen && { padding: 10, marginBottom: 16 }]}>
               <View style={styles.statItem}>
                 <Text style={styles.statLabel}>Games</Text>
-                <Text style={styles.statVal}>{stats.totalGames}</Text>
+                <Text style={[styles.statVal, isShortScreen && { fontSize: 14 }]}>{stats.totalGames}</Text>
               </View>
               <View style={styles.divider} />
               <View style={styles.statItem}>
                 <Text style={styles.statLabel}>Win % vs Bot</Text>
-                <Text style={[styles.statVal, { color: COLORS.accentBlue }]}>
+                <Text style={[styles.statVal, isShortScreen && { fontSize: 14 }, { color: COLORS.accentBlue }]}>
                   {stats.winRateVsBot}%
                 </Text>
               </View>
               <View style={styles.divider} />
               <View style={styles.statItem}>
                 <Text style={styles.statLabel}>Avg Moves</Text>
-                <Text style={styles.statVal}>{stats.avgMoves}</Text>
+                <Text style={[styles.statVal, isShortScreen && { fontSize: 14 }]}>{stats.avgMoves}</Text>
               </View>
             </View>
           )}
@@ -144,42 +170,43 @@ export default function HomeScreen() {
           {/* Secondary Action Buttons */}
           <View style={styles.actionButtonsRow}>
             <TouchableOpacity 
-              style={styles.actionButton}
+              style={[styles.actionButton, isShortScreen && { height: 40 }]}
               onPress={() => router.push('/rules')}
               activeOpacity={0.7}
             >
-              <Ionicons name="help-circle-outline" size={20} color={COLORS.accentBlue} />
-              <Text style={styles.actionButtonText}>Rules & Directions</Text>
+              <Ionicons name="help-circle-outline" size={isShortScreen ? 16 : 20} color={COLORS.accentBlue} />
+              <Text style={[styles.actionButtonText, isShortScreen && { fontSize: 12 }]}>Rules & Directions</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
-              style={styles.actionButton}
+              style={[styles.actionButton, isShortScreen && { height: 40 }]}
               onPress={() => router.push('/history')}
               activeOpacity={0.7}
             >
-              <Ionicons name="stats-chart" size={20} color={COLORS.accentBlue} />
-              <Text style={styles.actionButtonText}>History & Stats</Text>
+              <Ionicons name="stats-chart" size={isShortScreen ? 16 : 20} color={COLORS.accentBlue} />
+              <Text style={[styles.actionButtonText, isShortScreen && { fontSize: 12 }]}>History & Stats</Text>
             </TouchableOpacity>
           </View>
 
         </ScrollView>
       </View>
-    </SafeAreaView>
+      {isThreeButton && (
+        <View style={{ height: insets.bottom, backgroundColor: '#000000' }} />
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  screenContainer: {
     flex: 1,
     backgroundColor: COLORS.background,
   },
   container: {
     flex: 1,
-    paddingHorizontal: 20,
   },
   scrollContent: {
-    paddingTop: Platform.OS === 'ios' ? 20 : 40,
-    paddingBottom: 40,
+    paddingTop: 12,
   },
   header: {
     alignItems: 'center',
@@ -352,4 +379,5 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
+
 
