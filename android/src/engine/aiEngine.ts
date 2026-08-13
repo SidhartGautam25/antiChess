@@ -208,10 +208,27 @@ export function minimax(
 }
 
 /**
- * Returns the bot's chosen move based on active pieces and the selected AI difficulty level.
+ * A simple seedable LCG (Linear Congruential Generator) PRNG.
  */
-export function getBotMoveForLevel(levelNumber: number, pieces: Piece[]): Move | null {
+export function seedRandom(seed: number): () => number {
+  let currentSeed = seed;
+  return () => {
+    currentSeed = (currentSeed * 1664525 + 1013904223) % 4294967296;
+    return currentSeed / 4294967296;
+  };
+}
+
+/**
+ * Returns the bot's chosen move based on active pieces and the selected AI difficulty level.
+ * Uses a seedable random generator for deterministic bot blunders.
+ */
+export function getBotMoveForLevel(
+  levelNumber: number,
+  pieces: Piece[],
+  seed: number
+): { move: Move | null; nextSeed: number } {
   const config = LEVEL_REGISTRY[levelNumber] || LEVEL_REGISTRY[1];
+  const rng = seedRandom(seed);
   
   // Find all legal moves for Player 2 (AI)
   const botPieces = pieces.filter((p) => p.player === 2);
@@ -228,17 +245,40 @@ export function getBotMoveForLevel(levelNumber: number, pieces: Piece[]): Move |
   }
   
   if (allMoves.length === 0) {
-    return null;
+    return { move: null, nextSeed: Math.floor(rng() * 1000000) };
   }
+  
+  let chosenMove: Move | null = null;
   
   // LEVEL BLUNDER LOGIC:
   // Randomly blunder a move on lower levels to simulate human-like skill level
-  if (Math.random() < config.blunderRate) {
-    const randomIndex = Math.floor(Math.random() * allMoves.length);
-    return allMoves[randomIndex];
+  if (rng() < config.blunderRate) {
+    const randomIndex = Math.floor(rng() * allMoves.length);
+    chosenMove = allMoves[randomIndex];
+  } else {
+    // Run Minimax search to find the optimal move
+    const { move } = minimax(pieces, config.depth, -Infinity, Infinity, true, config);
+    chosenMove = move;
   }
   
-  // Run Minimax search to find the optimal move
-  const { move } = minimax(pieces, config.depth, -Infinity, Infinity, true, config);
-  return move;
+  return {
+    move: chosenMove,
+    nextSeed: Math.floor(rng() * 1000000),
+  };
+}
+
+/**
+ * Async boundary wrapper for the bot's move calculation.
+ * Returns a Promise to avoid blocking the main UI thread immediately.
+ */
+export async function getBotMoveForLevelAsync(
+  levelNumber: number,
+  pieces: Piece[],
+  seed: number
+): Promise<{ move: Move | null; nextSeed: number }> {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve(getBotMoveForLevel(levelNumber, pieces, seed));
+    }, 0);
+  });
 }

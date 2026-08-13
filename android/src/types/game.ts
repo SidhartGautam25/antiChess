@@ -38,6 +38,14 @@ export interface LevelConfig {
   name: string;
 }
 
+export interface MoveLogItem {
+  revision: number;
+  pieceId: string;
+  from: Position;
+  to: Position;
+  capturedPieceId?: string;
+}
+
 export interface GameHistoryItem {
   id: string;
   mode: GameMode;
@@ -46,4 +54,5 @@ export interface GameHistoryItem {
   movesCount: number;
   duration: number; // in seconds
   timestamp: number; // epoch milliseconds
+  moveLog?: MoveLogItem[];
 }

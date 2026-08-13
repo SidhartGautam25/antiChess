@@ -277,3 +277,138 @@ This will make future reports much easier to diagnose.
 - No piece visually returns to an older square after bot moves.
 - Undo and reset do not leave animated pieces at stale positions.
 - Higher AI levels do not increase the chance of visual drift.
+
+## Current Implementation Audit
+
+Status after reviewing the current code:
+
+| Plan Item | Current Status | Notes |
+| --- | --- | --- |
+| Add `boardRevision` to session state | Done | `useGameSession` now stores `boardRevision` inside `sessionState`. |
+| Increment revision on committed board changes | Mostly done | Human moves, bot moves, and undo increment it. Reset/settings replace state and set revision back to `0`, which is acceptable as a fresh session reset. |
+| Pass revision through board rendering | Done | `game.tsx` passes `boardRevision` to `GameBoard`, and `GameBoard` passes it to `AnimatedPiece`. |
+| Cancel stale animations | Done | `AnimatedPiece` calls `cancelAnimation(x)` and `cancelAnimation(y)` before starting a new movement. |
+| Snap to latest target on completion | Mostly done | `x` and `y` are forced to `targetX`/`targetY` when the animation finishes and the revision still matches. |
+| Atomic state management | Partially done | Related game state is now grouped into one `sessionState` object, but it still uses `useState` instead of a reducer with explicit actions. This is much better than separate state variables, but not the cleanest final form. |
+| Disable input during animation | Done | Legal moves, tile clicks, and undo are disabled while `animatingPieceId` is set. |
+| Development board validation | Partially done | Duplicate positions, out-of-bounds positions, and dead selected pieces are checked in `__DEV__`. Legal move validation and active-player validation can still be stronger. |
+| Separate position wrapper from visual piece shape | Not done | `AnimatedPiece` still handles both animation/positioning and shape rendering. |
+| Manual gameplay testing | Not verified here | TypeScript passes, but I did not run the game on a device/emulator in this audit. |
+
+## Single Source Of Truth Assessment
+
+The game now mostly follows the single source of truth principle for logical state.
+
+Current source of truth:
+
+- `sessionState.pieces` is the authoritative board.
+- legal moves are derived from `sessionState.pieces`;
+- tile highlighting is derived from `sessionState.pieces`;
+- captured counts are derived from `sessionState.pieces`;
+- turn state, winner, move count, and history live together in `sessionState`.
+
+Remaining caveat:
+
+- `AnimatedPiece` still owns temporary native visual coordinates in Reanimated shared values (`x` and `y`).
+
+That is normal for animation, but it means the visual layer still has transient positional state. The important improvement is that this transient state is now guarded by `boardRevision`, cancelled before new movement starts, and snapped back to the authoritative target. So the logical game state is single-source-of-truth; the animation layer is now a derived cache rather than an independent board model.
+
+## Determinism Assessment
+
+The rules engine is deterministic:
+
+- `simulateMove` is pure.
+- `getLegalMoves` is deterministic.
+- `checkWinCondition` is deterministic.
+- minimax move selection is deterministic for the same board and level config.
+
+The bot is not fully deterministic on levels 1-9 because `getBotMoveForLevel` uses `Math.random()` for blunder moves. Level 10 has `blunderRate: 0`, so it should be deterministic for a fixed board state.
+
+This randomness is not necessarily bad for gameplay, but it makes bugs harder to reproduce. If we want reliable debugging and replay, bot randomness should use a seeded random generator stored in match/session state.
+
+## Remaining Risks
+
+1. Animation completion can fire twice for one move.
+
+   `AnimatedPiece` starts separate `withTiming` animations for `x` and `y`, and both callbacks call `onAnimationComplete(piece.id)`. The session handler ignores the second callback because `animatingPieceId` has already been cleared, so this is mostly safe. Still, the first axis to finish can advance the turn before the second axis has finished visually.
+
+   Improvement: drive both coordinates from one progress animation, or track completion of both axes and call `onAnimationComplete` once.
+
+2. `AnimatedPiece` still mixes position logic and rendering logic.
+
+   The component calculates animation coordinates, manages revision checks, renders piece shape, reads tile value, and owns press behavior.
+
+   Improvement: split it into:
+
+   - `AnimatedPiecePosition`
+   - `PieceView`
+
+   This makes future UI edits less likely to affect movement correctness.
+
+3. Move validation depends mostly on the click handler.
+
+   `handleTileClick` checks `legalMoves` before calling `executeMove`, but `executeMove` itself does not re-check that the target is legal.
+
+   Improvement: validate the move inside `executeMove` too. This protects future code paths, tests, bot integrations, or gesture-based controls from accidentally committing illegal moves.
+
+4. Bot move calculation still runs on the JS thread.
+
+   Higher levels use deeper minimax. The stronger the bot gets, the more likely the UI can feel delayed.
+
+   Improvement: move AI calculation behind an async boundary or worker-style interface where possible, and commit only the final move result if it still matches the latest board revision.
+
+5. Match saving can run as soon as `winner` is set.
+
+   For bot wins or 50-move results, `winner` may be set before the final piece animation visually completes.
+
+   Improvement: save the match after the terminal animation completes, or add `gamePhase: 'playing' | 'animating' | 'complete'` so persistence follows the visible game lifecycle.
+
+6. Dev logging is always active in `__DEV__`.
+
+   Every board revision logs the full piece list in development.
+
+   Improvement: put logs behind a specific debug flag, such as `DEBUG_BOARD_STATE`, so normal development remains quiet.
+
+## Recommended Next Improvements
+
+1. Call animation completion exactly once per move.
+
+   Use a single shared progress value or a small completion coordinator. This removes the remaining race where one axis finishes before the other.
+
+2. Convert `useGameSession` to `useReducer`.
+
+   Keep `sessionState`, but update it through explicit actions like `PLAYER_MOVE_COMMITTED`, `BOT_MOVE_COMMITTED`, `ANIMATION_COMPLETED`, `UNDO_COMMITTED`, and `GAME_RESET`. This makes the turn lifecycle easier to audit and reduces accidental partial transitions.
+
+3. Add seeded randomness for bot blunders.
+
+   Store a seed in the match and replace `Math.random()` with a deterministic RNG. Gameplay can still feel random, but every match becomes reproducible for debugging.
+
+4. Revalidate moves inside `executeMove`.
+
+   Check that the piece belongs to the active player and that the destination is still legal at the moment of execution. This makes the move layer defensive instead of trusting only UI selection.
+
+5. Add unit tests for engine and session transitions.
+
+   Useful tests:
+
+   - `simulateMove` never mutates input;
+   - capture removes only the target piece;
+   - no duplicate board positions after legal moves;
+   - undo restores the exact previous board;
+   - bot move commits exactly one revision;
+   - selected dead pieces are cleared;
+   - 50-move winner logic is stable.
+
+6. Add a lightweight replay/debug record.
+
+   Store each committed move with `{ revision, pieceId, from, to, capturedPieceId, resultingWinner }`. This would make visual bugs easier to reproduce and would also unlock future replay/history features.
+
+## Verification Performed
+
+Static TypeScript verification passes:
+
+```sh
+./node_modules/.bin/tsc --noEmit
+```
+
+`expo lint` could not be completed in this environment because Expo tried to auto-install missing lint packages while networking was disabled. The interrupted lint attempt was cleaned up and no package changes remain from that check.

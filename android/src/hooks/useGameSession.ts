@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Piece, PieceType, Player, Position, GameMode, Move } from '../types/game';
+import { useState, useEffect, useRef, useCallback, useReducer } from 'react';
+import { Piece, PieceType, Player, Position, GameMode, Move, MoveLogItem } from '../types/game';
 import { INITIAL_PIECES } from '../constants/board';
 import { getLegalMoves, simulateMove, checkWinCondition } from '../engine/gameEngine';
-import { getBotMoveForLevel } from '../engine/aiEngine';
+import { getBotMoveForLevelAsync } from '../engine/aiEngine';
+
+const DEBUG_BOARD_STATE = false; // Set to true to enable detailed board logs in __DEV__
 
 interface GameSessionProps {
   initialMode: GameMode;
@@ -13,28 +15,43 @@ interface GameSessionProps {
     winner: Player | 0;
     movesCount: number;
     duration: number;
+    moveLog?: MoveLogItem[];
   }) => Promise<any>;
 }
 
-export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameSessionProps) {
-  const [gameMode, setGameMode] = useState<GameMode>(initialMode);
-  const [level, setLevel] = useState<number>(initialLevel);
+interface HistoryStackEntry {
+  pieces: Piece[];
+  activePlayer: Player;
+  movesCount: number;
+  seed: number;
+  moveLog: MoveLogItem[];
+}
 
-  const [sessionState, setSessionState] = useState<{
-    pieces: Piece[];
-    activePlayer: Player;
-    selectedPieceId: string | null;
-    winner: Player | 0 | null;
-    isBotThinking: boolean;
-    movesCount: number;
-    historyStack: Array<{
-      pieces: Piece[];
-      activePlayer: Player;
-      movesCount: number;
-    }>;
-    boardRevision: number;
-    animatingPieceId: string | null;
-  }>({
+export interface SessionState {
+  pieces: Piece[];
+  activePlayer: Player;
+  selectedPieceId: string | null;
+  winner: Player | 0 | null;
+  isBotThinking: boolean;
+  movesCount: number;
+  historyStack: HistoryStackEntry[];
+  boardRevision: number;
+  animatingPieceId: string | null;
+  seed: number;
+  moveLog: MoveLogItem[];
+}
+
+export type SessionAction =
+  | { type: 'PLAYER_MOVE_COMMITTED'; pieceId: string; to: Position }
+  | { type: 'BOT_MOVE_COMMITTED'; pieceId: string; to: Position; nextSeed: number }
+  | { type: 'ANIMATION_COMPLETED'; pieceId: string; gameMode: GameMode }
+  | { type: 'UNDO_COMMITTED'; gameMode: GameMode }
+  | { type: 'GAME_RESET'; seed: number }
+  | { type: 'SET_SELECTED_PIECE'; pieceId: string | null }
+  | { type: 'BOT_MOVE_FAILED' };
+
+export function createInitialState(seed: number): SessionState {
+  return {
     pieces: INITIAL_PIECES,
     activePlayer: 1,
     selectedPieceId: null,
@@ -44,7 +61,265 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
     historyStack: [],
     boardRevision: 0,
     animatingPieceId: null,
-  });
+    seed,
+    moveLog: [],
+  };
+}
+
+export function sessionReducer(state: SessionState, action: SessionAction): SessionState {
+  switch (action.type) {
+    case 'PLAYER_MOVE_COMMITTED': {
+      const piece = state.pieces.find((p) => p.id === action.pieceId);
+      if (!piece || state.winner || state.isBotThinking || state.animatingPieceId) return state;
+
+      // Revalidate active player
+      if (piece.player !== state.activePlayer) {
+        console.warn(`[Move Validation Warning] Piece ${action.pieceId} belongs to player ${piece.player} but activePlayer is ${state.activePlayer}`);
+        return state;
+      }
+
+      // Revalidate legality of the target move
+      const legalTargets = getLegalMoves(piece, state.pieces);
+      const isTargetLegal = legalTargets.some((t) => t.row === action.to.row && t.col === action.to.col);
+      if (!isTargetLegal) {
+        console.warn(`[Move Validation Warning] Move for piece ${action.pieceId} to (${action.to.row}, ${action.to.col}) is illegal`);
+        return state;
+      }
+
+      const historyEntry: HistoryStackEntry = {
+        pieces: state.pieces,
+        activePlayer: state.activePlayer,
+        movesCount: state.movesCount,
+        seed: state.seed,
+        moveLog: state.moveLog,
+      };
+
+      const nextPieces = simulateMove(state.pieces, piece, action.to);
+      const capturedPiece = state.pieces.find(
+        (p) => p.position.row === action.to.row && p.position.col === action.to.col
+      );
+
+      const moveLogItem: MoveLogItem = {
+        revision: state.boardRevision + 1,
+        pieceId: action.pieceId,
+        from: piece.position,
+        to: action.to,
+        ...(capturedPiece ? { capturedPieceId: capturedPiece.id } : {}),
+      };
+
+      return {
+        ...state,
+        pieces: nextPieces,
+        movesCount: state.movesCount + 1,
+        selectedPieceId: null,
+        animatingPieceId: action.pieceId,
+        historyStack: [...state.historyStack, historyEntry],
+        boardRevision: state.boardRevision + 1,
+        moveLog: [...state.moveLog, moveLogItem],
+      };
+    }
+
+    case 'BOT_MOVE_COMMITTED': {
+      const piece = state.pieces.find((p) => p.id === action.pieceId);
+      if (!piece || state.winner || state.animatingPieceId || !state.isBotThinking) return state;
+
+      // Revalidate bot player and activePlayer
+      if (piece.player !== 2 || state.activePlayer !== 2) {
+        console.warn(`[Bot Move Validation Warning] Expected player 2 for bot but got piece player ${piece.player} and activePlayer ${state.activePlayer}`);
+        return state;
+      }
+
+      // Revalidate legality of the target move
+      const legalTargets = getLegalMoves(piece, state.pieces);
+      const isTargetLegal = legalTargets.some((t) => t.row === action.to.row && t.col === action.to.col);
+      if (!isTargetLegal) {
+        console.warn(`[Bot Move Validation Warning] Bot move for piece ${action.pieceId} to (${action.to.row}, ${action.to.col}) is illegal`);
+        return state;
+      }
+
+      const historyEntry: HistoryStackEntry = {
+        pieces: state.pieces,
+        activePlayer: 2,
+        movesCount: state.movesCount,
+        seed: state.seed,
+        moveLog: state.moveLog,
+      };
+
+      const nextPieces = simulateMove(state.pieces, piece, action.to);
+      const capturedPiece = state.pieces.find(
+        (p) => p.position.row === action.to.row && p.position.col === action.to.col
+      );
+
+      const moveLogItem: MoveLogItem = {
+        revision: state.boardRevision + 1,
+        pieceId: action.pieceId,
+        from: piece.position,
+        to: action.to,
+        ...(capturedPiece ? { capturedPieceId: capturedPiece.id } : {}),
+      };
+
+      return {
+        ...state,
+        pieces: nextPieces,
+        movesCount: state.movesCount + 1,
+        isBotThinking: false,
+        animatingPieceId: action.pieceId,
+        seed: action.nextSeed,
+        historyStack: [...state.historyStack, historyEntry],
+        boardRevision: state.boardRevision + 1,
+        moveLog: [...state.moveLog, moveLogItem],
+      };
+    }
+
+    case 'ANIMATION_COMPLETED': {
+      if (state.animatingPieceId !== action.pieceId) return state;
+
+      // Check win condition (all opponent pieces captured)
+      const gameWinner = checkWinCondition(state.pieces);
+      if (gameWinner !== null) {
+        return {
+          ...state,
+          winner: gameWinner,
+          animatingPieceId: null,
+        };
+      }
+
+      // Check 50-move limit
+      if (state.movesCount >= 50) {
+        const getWeight = (plist: Piece[]) => plist.reduce((acc, p) => {
+          if (p.type === PieceType.RIDER) return acc + 3;
+          if (p.type === PieceType.JUMPER) return acc + 2;
+          return acc + 1;
+        }, 0);
+        
+        const p1Weight = getWeight(state.pieces.filter(p => p.player === 1));
+        const p2Weight = getWeight(state.pieces.filter(p => p.player === 2));
+        
+        let limitWinner: Player | 0;
+        if (p1Weight > p2Weight) {
+          limitWinner = 1;
+        } else if (p2Weight > p1Weight) {
+          limitWinner = 2;
+        } else {
+          limitWinner = 0; // Draw
+        }
+
+        return {
+          ...state,
+          winner: limitWinner,
+          animatingPieceId: null,
+        };
+      }
+
+      // Transition turn
+      if (state.activePlayer === 1) {
+        if (action.gameMode === 'VS_BOT') {
+          return {
+            ...state,
+            isBotThinking: true,
+            animatingPieceId: null,
+          };
+        } else {
+          return {
+            ...state,
+            activePlayer: 2,
+            animatingPieceId: null,
+          };
+        }
+      } else {
+        return {
+          ...state,
+          activePlayer: 1,
+          animatingPieceId: null,
+        };
+      }
+    }
+
+    case 'UNDO_COMMITTED': {
+      if (state.historyStack.length === 0 || state.isBotThinking || state.animatingPieceId) return state;
+
+      if (action.gameMode === 'VS_BOT') {
+        if (state.historyStack.length >= 2) {
+          const targetState = state.historyStack[state.historyStack.length - 2];
+          return {
+            ...state,
+            pieces: targetState.pieces,
+            activePlayer: targetState.activePlayer,
+            movesCount: targetState.movesCount,
+            seed: targetState.seed,
+            moveLog: targetState.moveLog,
+            selectedPieceId: null,
+            winner: null,
+            historyStack: state.historyStack.slice(0, -2),
+            boardRevision: state.boardRevision + 1,
+            animatingPieceId: null,
+            isBotThinking: false,
+          };
+        } else {
+          const targetState = state.historyStack[0];
+          return {
+            ...state,
+            pieces: targetState.pieces,
+            activePlayer: targetState.activePlayer,
+            movesCount: targetState.movesCount,
+            seed: targetState.seed,
+            moveLog: targetState.moveLog,
+            selectedPieceId: null,
+            winner: null,
+            historyStack: [],
+            boardRevision: state.boardRevision + 1,
+            animatingPieceId: null,
+            isBotThinking: false,
+          };
+        }
+      } else {
+        const targetState = state.historyStack[state.historyStack.length - 1];
+        return {
+          ...state,
+          pieces: targetState.pieces,
+          activePlayer: targetState.activePlayer,
+          movesCount: targetState.movesCount,
+          seed: targetState.seed,
+          moveLog: targetState.moveLog,
+          selectedPieceId: null,
+          winner: null,
+          historyStack: state.historyStack.slice(0, -1),
+          boardRevision: state.boardRevision + 1,
+          animatingPieceId: null,
+          isBotThinking: false,
+        };
+      }
+    }
+
+    case 'GAME_RESET':
+      return createInitialState(action.seed);
+
+    case 'SET_SELECTED_PIECE':
+      return {
+        ...state,
+        selectedPieceId: action.pieceId,
+      };
+
+    case 'BOT_MOVE_FAILED':
+      return {
+        ...state,
+        isBotThinking: false,
+      };
+
+    default:
+      return state;
+  }
+}
+
+export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameSessionProps) {
+  const [gameMode, setGameMode] = useState<GameMode>(initialMode);
+  const [level, setLevel] = useState<number>(initialLevel);
+
+  const [sessionState, dispatch] = useReducer(
+    sessionReducer,
+    Math.floor(Math.random() * 1000000),
+    createInitialState
+  );
 
   const startTimeRef = useRef<number>(Date.now());
   const botTimeoutRef = useRef<any>(null);
@@ -64,17 +339,8 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
       clearTimeout(botTimeoutRef.current);
       botTimeoutRef.current = null;
     }
-    setSessionState({
-      pieces: INITIAL_PIECES,
-      activePlayer: 1,
-      selectedPieceId: null,
-      winner: null,
-      isBotThinking: false,
-      movesCount: 0,
-      historyStack: [],
-      boardRevision: 0,
-      animatingPieceId: null,
-    });
+    const newSeed = Math.floor(Math.random() * 1000000);
+    dispatch({ type: 'GAME_RESET', seed: newSeed });
     startTimeRef.current = Date.now();
   }, []);
 
@@ -87,17 +353,8 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
     setGameMode(newMode);
     setLevel(newLevel);
     // Restart with new settings
-    setSessionState({
-      pieces: INITIAL_PIECES,
-      activePlayer: 1,
-      selectedPieceId: null,
-      winner: null,
-      isBotThinking: false,
-      movesCount: 0,
-      historyStack: [],
-      boardRevision: 0,
-      animatingPieceId: null,
-    });
+    const newSeed = Math.floor(Math.random() * 1000000);
+    dispatch({ type: 'GAME_RESET', seed: newSeed });
     startTimeRef.current = Date.now();
   }, []);
 
@@ -134,7 +391,7 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
   }, [sessionState.pieces, sessionState.selectedPieceId]);
 
   useEffect(() => {
-    if (!__DEV__) return;
+    if (!__DEV__ || !DEBUG_BOARD_STATE) return;
     console.log('Board State Updated:', {
       boardRevision: sessionState.boardRevision,
       activePlayer: sessionState.activePlayer,
@@ -146,144 +403,66 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
     });
   }, [sessionState.boardRevision]);
 
-  // Core move execution function (just starts animation, does not change active player yet)
+  // Core move execution function (just dispatches the move action)
   const executeMove = useCallback((pieceId: string, to: Position) => {
-    const pieces = sessionState.pieces;
-    const activePlayer = sessionState.activePlayer;
-    const movesCount = sessionState.movesCount;
-    const winner = sessionState.winner;
-    const isBotThinking = sessionState.isBotThinking;
-    const animatingPieceId = sessionState.animatingPieceId;
-
-    const piece = pieces.find((p) => p.id === pieceId);
-    if (!piece || winner || isBotThinking || animatingPieceId) return;
-
-    const historyEntry = { pieces, activePlayer, movesCount };
-    const nextPieces = simulateMove(pieces, piece, to);
-    const nextMovesCount = movesCount + 1;
-
-    setSessionState((prev) => ({
-      ...prev,
-      pieces: nextPieces,
-      movesCount: nextMovesCount,
-      selectedPieceId: null,
-      animatingPieceId: pieceId, // Start piece animation
-      historyStack: [...prev.historyStack, historyEntry],
-      boardRevision: prev.boardRevision + 1,
-    }));
-  }, [sessionState.pieces, sessionState.activePlayer, sessionState.movesCount, sessionState.winner, sessionState.isBotThinking, sessionState.animatingPieceId]);
+    dispatch({ type: 'PLAYER_MOVE_COMMITTED', pieceId, to });
+  }, []);
 
   // Handle animation completion callback
   const handleAnimationComplete = useCallback((pieceId: string) => {
-    setSessionState((prev) => {
-      if (prev.animatingPieceId !== pieceId) return prev;
-
-      const gameWinner = checkWinCondition(prev.pieces);
-      if (gameWinner !== null) {
-        return {
-          ...prev,
-          winner: gameWinner,
-          animatingPieceId: null,
-        };
-      }
-
-      if (prev.activePlayer === 1) {
-        if (gameMode === 'VS_BOT') {
-          return {
-            ...prev,
-            isBotThinking: true,
-            animatingPieceId: null,
-          };
-        } else {
-          return {
-            ...prev,
-            activePlayer: 2,
-            animatingPieceId: null,
-          };
-        }
-      }
-
-      if (prev.activePlayer === 2) {
-        return {
-          ...prev,
-          activePlayer: 1,
-          animatingPieceId: null,
-        };
-      }
-
-      return prev;
-    });
+    dispatch({ type: 'ANIMATION_COMPLETED', pieceId, gameMode });
   }, [gameMode]);
 
   // Effect to calculate bot move after player's animation has completed
   useEffect(() => {
     if (!sessionState.isBotThinking || sessionState.winner !== null) return;
 
+    const startedRevision = sessionState.boardRevision;
+    let isActive = true;
+
     botTimeoutRef.current = setTimeout(() => {
-      try {
-        const botMove = getBotMoveForLevel(level, sessionState.pieces);
-        
-        if (botMove) {
-          const botPiece = sessionState.pieces.find((p) => p.id === botMove.pieceId);
-          if (botPiece) {
-            const historyEntry = {
-              pieces: sessionState.pieces,
-              activePlayer: 2 as Player,
-              movesCount: sessionState.movesCount,
-            };
-            const botNextPieces = simulateMove(sessionState.pieces, botPiece, botMove.to);
-            const botNextMovesCount = sessionState.movesCount + 1;
-            let botWinner: Player | 0 | null = checkWinCondition(botNextPieces);
+      getBotMoveForLevelAsync(level, sessionState.pieces, sessionState.seed)
+        .then(({ move: botMove, nextSeed }) => {
+          if (!isActive) return;
 
-            // Check for 50-move limit
-            if (botWinner === null && botNextMovesCount >= 50) {
-              const getWeight = (plist: Piece[]) => plist.reduce((acc, p) => {
-                if (p.type === PieceType.RIDER) return acc + 3;
-                if (p.type === PieceType.JUMPER) return acc + 2;
-                return acc + 1;
-              }, 0);
-              
-              const p1Weight = getWeight(botNextPieces.filter(p => p.player === 1));
-              const p2Weight = getWeight(botNextPieces.filter(p => p.player === 2));
-              
-              if (p1Weight > p2Weight) {
-                botWinner = 1;
-              } else if (p2Weight > p1Weight) {
-                botWinner = 2;
-              } else {
-                botWinner = 0; // Draw
-              }
-            }
-
-            setSessionState((prev) => ({
-              ...prev,
-              pieces: botNextPieces,
-              movesCount: botNextMovesCount,
-              winner: botWinner,
-              isBotThinking: false,
-              animatingPieceId: botMove.pieceId, // Start bot piece animation
-              activePlayer: 2,
-              historyStack: [...prev.historyStack, historyEntry],
-              boardRevision: prev.boardRevision + 1,
-            }));
-          } else {
-            setSessionState((prev) => ({ ...prev, isBotThinking: false }));
+          // Double check that the board revision hasn't changed since we started thinking
+          if (sessionState.boardRevision !== startedRevision) {
+            console.warn('Bot move calculated but discarded due to board revision mismatch.');
+            dispatch({ type: 'BOT_MOVE_FAILED' });
+            return;
           }
-        } else {
-          setSessionState((prev) => ({ ...prev, isBotThinking: false }));
-        }
-      } catch (err) {
-        console.error('Error during AI execution:', err);
-        setSessionState((prev) => ({ ...prev, isBotThinking: false }));
-      }
+
+          if (botMove) {
+            const botPiece = sessionState.pieces.find((p) => p.id === botMove.pieceId);
+            if (botPiece) {
+              dispatch({
+                type: 'BOT_MOVE_COMMITTED',
+                pieceId: botMove.pieceId,
+                to: botMove.to,
+                nextSeed,
+              });
+            } else {
+              dispatch({ type: 'BOT_MOVE_FAILED' });
+            }
+          } else {
+            dispatch({ type: 'BOT_MOVE_FAILED' });
+          }
+        })
+        .catch((err) => {
+          console.error('Error during AI execution:', err);
+          if (isActive) {
+            dispatch({ type: 'BOT_MOVE_FAILED' });
+          }
+        });
     }, 300); // 300ms reaction delay for bot thinking
 
     return () => {
+      isActive = false;
       if (botTimeoutRef.current) {
         clearTimeout(botTimeoutRef.current);
       }
     };
-  }, [sessionState.isBotThinking, sessionState.pieces, sessionState.movesCount, sessionState.winner, level]);
+  }, [sessionState.isBotThinking, sessionState.winner, sessionState.boardRevision, level]);
 
   // Effect to handle match saving asynchronously after winner is declared
   useEffect(() => {
@@ -296,6 +475,7 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
       winner: sessionState.winner,
       movesCount: sessionState.movesCount,
       duration: Math.max(1, duration),
+      moveLog: sessionState.moveLog,
     });
   }, [sessionState.winner, gameMode, level, onSaveMatch]);
 
@@ -322,71 +502,20 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
       );
 
       if (clickedPiece) {
-        setSessionState((prev) => ({ ...prev, selectedPieceId: clickedPiece.id }));
+        dispatch({ type: 'SET_SELECTED_PIECE', pieceId: clickedPiece.id });
       } else {
-        setSessionState((prev) => ({ ...prev, selectedPieceId: null }));
+        dispatch({ type: 'SET_SELECTED_PIECE', pieceId: null });
       }
     }
   }, [sessionState.selectedPieceId, legalMoves, executeMove, sessionState.pieces, sessionState.activePlayer, sessionState.winner, sessionState.isBotThinking, sessionState.animatingPieceId]);
 
   // Undo functionality
   const undoMove = useCallback(() => {
-    const historyStack = sessionState.historyStack;
-    const isBotThinking = sessionState.isBotThinking;
-    const animatingPieceId = sessionState.animatingPieceId;
-
-    if (historyStack.length === 0 || isBotThinking || animatingPieceId) return;
-
-    if (gameMode === 'VS_BOT') {
-      // In VS_BOT mode, we need to revert BOTH the bot's turn and the player's turn (2 steps)
-      // unless there is only 1 move in the history, in which case we revert that 1 step.
-      if (historyStack.length >= 2) {
-        const targetState = historyStack[historyStack.length - 2];
-        setSessionState((prev) => ({
-          ...prev,
-          pieces: targetState.pieces,
-          activePlayer: targetState.activePlayer,
-          movesCount: targetState.movesCount,
-          selectedPieceId: null,
-          winner: null,
-          historyStack: prev.historyStack.slice(0, -2),
-          boardRevision: prev.boardRevision + 1,
-          animatingPieceId: null,
-        }));
-      } else {
-        // Just 1 move in stack (should not happen since bot moves immediately, but fallback)
-        const targetState = historyStack[0];
-        setSessionState((prev) => ({
-          ...prev,
-          pieces: targetState.pieces,
-          activePlayer: targetState.activePlayer,
-          movesCount: targetState.movesCount,
-          selectedPieceId: null,
-          winner: null,
-          historyStack: [],
-          boardRevision: prev.boardRevision + 1,
-          animatingPieceId: null,
-        }));
-      }
-    } else {
-      // Pass & play mode: revert 1 step
-      const targetState = historyStack[historyStack.length - 1];
-      setSessionState((prev) => ({
-        ...prev,
-        pieces: targetState.pieces,
-        activePlayer: targetState.activePlayer,
-        movesCount: targetState.movesCount,
-        selectedPieceId: null,
-        winner: null,
-        historyStack: prev.historyStack.slice(0, -1),
-        boardRevision: prev.boardRevision + 1,
-        animatingPieceId: null,
-      }));
-    }
-  }, [sessionState.historyStack, gameMode, sessionState.isBotThinking, sessionState.animatingPieceId]);
+    dispatch({ type: 'UNDO_COMMITTED', gameMode });
+  }, [gameMode]);
 
   const setSelectedPieceId = useCallback((id: string | null) => {
-    setSessionState((prev) => ({ ...prev, selectedPieceId: id }));
+    dispatch({ type: 'SET_SELECTED_PIECE', pieceId: id });
   }, []);
 
   return {
