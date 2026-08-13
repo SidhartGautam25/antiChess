@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, View, Pressable, Platform } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, cancelAnimation, runOnJS } from 'react-native-reanimated';
 import { Piece, PieceType } from '../../types/game';
 import { COLORS } from '../../constants/colors';
 import { FIXED_BOARD } from '../../constants/board';
@@ -10,9 +10,11 @@ interface AnimatedPieceProps {
   cellWidth: number;
   isSelected: boolean;
   onPress: () => void;
+  boardRevision: number;
+  onAnimationComplete: (pieceId: string) => void;
 }
 
-export default function AnimatedPiece({ piece, cellWidth, isSelected, onPress }: AnimatedPieceProps) {
+export default function AnimatedPiece({ piece, cellWidth, isSelected, onPress, boardRevision, onAnimationComplete }: AnimatedPieceProps) {
   const isScout = piece.type === PieceType.SCOUT;
   const isRider = piece.type === PieceType.RIDER;
   const isJumper = piece.type === PieceType.JUMPER;
@@ -37,9 +39,14 @@ export default function AnimatedPiece({ piece, cellWidth, isSelected, onPress }:
   const prevRow = React.useRef(piece.position.row);
   const prevCol = React.useRef(piece.position.col);
 
-  // Shared values for coordinates
+  // Shared values for coordinates and revision
   const x = useSharedValue(piece.position.col * cellWidth + centeringOffset);
   const y = useSharedValue(piece.position.row * cellWidth + centeringOffset);
+  const currentRevision = useSharedValue(boardRevision);
+
+  useEffect(() => {
+    currentRevision.value = boardRevision;
+  }, [boardRevision]);
 
   // Update animated coordinates when grid position or cell size changes
   useEffect(() => {
@@ -48,26 +55,42 @@ export default function AnimatedPiece({ piece, cellWidth, isSelected, onPress }:
 
     // Check if the piece moved to a different tile
     const positionChanged = prevRow.current !== piece.position.row || prevCol.current !== piece.position.col;
+    const startedRevision = boardRevision;
+
+    cancelAnimation(x);
+    cancelAnimation(y);
 
     if (positionChanged) {
       // Animate transition when moving to a new cell
       x.value = withTiming(targetX, {
         duration: 400,
         easing: Easing.out(Easing.quad),
+      }, (finished) => {
+        'worklet';
+        if (finished && currentRevision.value === startedRevision) {
+          x.value = targetX;
+          runOnJS(onAnimationComplete)(piece.id);
+        }
       });
       y.value = withTiming(targetY, {
         duration: 400,
         easing: Easing.out(Easing.quad),
+      }, (finished) => {
+        'worklet';
+        if (finished && currentRevision.value === startedRevision) {
+          y.value = targetY;
+          runOnJS(onAnimationComplete)(piece.id);
+        }
       });
     } else {
-      // Snap instantly on first render or when layout changes (e.g. device rotation/resizing)
+      // Snap instantly on first render, layout changes, or reset/undo
       x.value = targetX;
       y.value = targetY;
     }
 
     prevRow.current = piece.position.row;
     prevCol.current = piece.position.col;
-  }, [piece.position.row, piece.position.col, cellWidth, centeringOffset, x, y]);
+  }, [piece.position.row, piece.position.col, cellWidth, centeringOffset, boardRevision, x, y]);
 
   const animatedStyle = useAnimatedStyle(() => {
     return {

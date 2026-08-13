@@ -35,6 +35,8 @@ export default function GameScreen() {
     handleTileClick,
     undoMove,
     restartGame,
+    boardRevision,
+    onAnimationComplete,
   } = useGameSession({
     initialMode: mode,
     initialLevel: level,
@@ -263,6 +265,8 @@ export default function GameScreen() {
           activePlayer={activePlayer}
           isBotThinking={isBotThinking}
           onTileClick={handleTileClick}
+          boardRevision={boardRevision}
+          onAnimationComplete={onAnimationComplete}
         />
 
         {/* Bottom Status Bar: Player 1 status */}
