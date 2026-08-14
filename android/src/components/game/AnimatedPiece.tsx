@@ -21,6 +21,21 @@ function toBoardCoords(row: number, col: number, cellWidth: number, centeringOff
   };
 }
 
+// Soft ease-out: most of the move is a gentle glide into the destination (no hard brake).
+const MOVE_EASING = Easing.bezier(0.12, 0.8, 0.18, 1);
+
+function getMoveDuration(fromRow: number, fromCol: number, toRow: number, toCol: number) {
+  const cellDistance = Math.max(Math.abs(toRow - fromRow), Math.abs(toCol - fromCol));
+  if (cellDistance === 0) {
+    return 0;
+  }
+
+  // Longer base + stronger distance scaling so big jumps don't feel rushed.
+  const linear = 600 + cellDistance * 165;
+  const longMoveBonus = cellDistance > 2 ? (cellDistance - 2) * 90 : 0;
+  return Math.min(1400, Math.max(620, linear + longMoveBonus));
+}
+
 export default function AnimatedPiece({
   piece,
   cellWidth,
@@ -114,25 +129,23 @@ export default function AnimatedPiece({
     }
 
     if (positionChanged && animatingPieceId === piece.id) {
+      const fromRow = prevRow.current;
+      const fromCol = prevCol.current;
       const targetRow = piece.position.row;
       const targetCol = piece.position.col;
+      const duration = getMoveDuration(fromRow, fromCol, targetRow, targetCol);
+      const timingConfig = { duration, easing: MOVE_EASING };
 
       // Update tile number immediately so it moves with the piece, not after arrival.
       setDisplayPos({ row: targetRow, col: targetCol });
 
-      translateX.value = withTiming(x, {
-        duration: 400,
-        easing: Easing.out(Easing.quad),
-      }, (finished) => {
+      translateX.value = withTiming(x, timingConfig, (finished) => {
         'worklet';
         if (finished) {
           runOnJS(handleAnimationFinished)(piece.id);
         }
       });
-      translateY.value = withTiming(y, {
-        duration: 400,
-        easing: Easing.out(Easing.quad),
-      });
+      translateY.value = withTiming(y, timingConfig);
     } else {
       snapToLogicalPosition(piece.position.row, piece.position.col);
     }
