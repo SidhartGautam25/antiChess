@@ -78,24 +78,30 @@ function playWebSound(type: 'move' | 'capture') {
   }
 }
 
-// Function to play sound using expo-av on native platforms
+// Keep a map of players so we don't recreate them every time (saves resource loading time and memory)
+let movePlayer: any = null;
+let capturePlayer: any = null;
+
+// Function to play sound using expo-audio on native platforms (New Architecture compatible)
 async function playNativeSound(type: 'move' | 'capture') {
   try {
-    const { Audio } = require('expo-av');
+    const { createAudioPlayer } = require('expo-audio');
     const moveUrl = 'https://lichess.org/assets/sound/standard/Move.mp3';
     const captureUrl = 'https://lichess.org/assets/sound/standard/Capture.mp3';
     
-    const { sound } = await Audio.Sound.createAsync(
-      { uri: type === 'move' ? moveUrl : captureUrl },
-      { shouldPlay: true }
-    );
-    
-    // Automatically unload sound from memory when done
-    sound.setOnPlaybackStatusUpdate((status: any) => {
-      if (status.didJustFinish) {
-        sound.unloadAsync().catch(() => {});
+    if (type === 'move') {
+      if (!movePlayer) {
+        movePlayer = createAudioPlayer({ uri: moveUrl });
       }
-    });
+      movePlayer.seekTo(0);
+      movePlayer.play();
+    } else {
+      if (!capturePlayer) {
+        capturePlayer = createAudioPlayer({ uri: captureUrl });
+      }
+      capturePlayer.seekTo(0);
+      capturePlayer.play();
+    }
   } catch (e) {
     console.warn('Native Audio playback failed:', e);
   }
