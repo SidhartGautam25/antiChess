@@ -37,9 +37,11 @@ export default function AnimatedPiece({
   // accounts for 2px gridContainer padding, 1.5px tile margin, and centers piece within tileInnerWidth
   const centeringOffset = 2 + (cellWidth - pieceSize) / 2;
 
-  // Refs to track the previous position for triggering slide animations
+  // Refs to track previous layout/position for triggering slide animations
   const prevRow = React.useRef(piece.position.row);
   const prevCol = React.useRef(piece.position.col);
+  const prevCellWidth = React.useRef(cellWidth);
+  const prevCenteringOffset = React.useRef(centeringOffset);
 
   // Target positions (computed dynamically)
   const targetX = piece.position.col * cellWidth + centeringOffset;
@@ -52,25 +54,38 @@ export default function AnimatedPiece({
   const targetXShared = useSharedValue(targetX);
   const targetYShared = useSharedValue(targetY);
   const currentRevision = useSharedValue(boardRevision);
+  const boardRevisionRef = React.useRef(boardRevision);
 
   // State to track visual position for piece label rendering (prevents immediate label change before slide)
   const [displayPos, setDisplayPos] = React.useState({ row: piece.position.row, col: piece.position.col });
 
   useEffect(() => {
     currentRevision.value = boardRevision;
+    boardRevisionRef.current = boardRevision;
   }, [boardRevision]);
 
-  // Update animated coordinates when grid position or cell size changes
+  // Update animated coordinates only when this piece moves or the board layout changes.
+  // Do NOT depend on boardRevision here — it increments on every move (including bot moves)
+  // and re-running this effect for unrelated pieces cancels in-flight animations and can
+  // desync shared values, making stationary pieces snap back to their old visual position.
   useEffect(() => {
     const nextTargetX = piece.position.col * cellWidth + centeringOffset;
     const nextTargetY = piece.position.row * cellWidth + centeringOffset;
 
-    const positionChanged = prevRow.current !== piece.position.row || prevCol.current !== piece.position.col;
-    const startedRevision = boardRevision;
+    const positionChanged =
+      prevRow.current !== piece.position.row || prevCol.current !== piece.position.col;
+    const layoutChanged =
+      prevCellWidth.current !== cellWidth || prevCenteringOffset.current !== centeringOffset;
 
-    cancelAnimation(progress);
+    if (!positionChanged && !layoutChanged) {
+      return;
+    }
+
+    const startedRevision = boardRevisionRef.current;
 
     if (positionChanged) {
+      cancelAnimation(progress);
+
       // Calculate current position to start from (to avoid sudden jumps)
       const currentX = startX.value + (targetXShared.value - startX.value) * progress.value;
       const currentY = startY.value + (targetYShared.value - startY.value) * progress.value;
@@ -94,7 +109,7 @@ export default function AnimatedPiece({
         }
       });
     } else {
-      // Snap instantly on first render, layout changes, or reset/undo
+      // Layout-only change: rescale coordinates without touching animation progress
       startX.value = nextTargetX;
       startY.value = nextTargetY;
       targetXShared.value = nextTargetX;
@@ -105,7 +120,9 @@ export default function AnimatedPiece({
 
     prevRow.current = piece.position.row;
     prevCol.current = piece.position.col;
-  }, [piece.position.row, piece.position.col, cellWidth, centeringOffset, boardRevision]);
+    prevCellWidth.current = cellWidth;
+    prevCenteringOffset.current = centeringOffset;
+  }, [piece.position.row, piece.position.col, cellWidth, centeringOffset, onAnimationComplete, piece.id]);
 
   const animatedStyle = useAnimatedStyle(() => {
     const curX = startX.value + (targetXShared.value - startX.value) * progress.value;

@@ -322,6 +322,11 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
     createInitialState
   );
 
+  const stateRef = useRef(sessionState);
+  useEffect(() => {
+    stateRef.current = sessionState;
+  }, [sessionState]);
+
   const startTimeRef = useRef<number>(Date.now());
   const botTimeoutRef = useRef<any>(null);
 
@@ -418,23 +423,23 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
   useEffect(() => {
     if (!sessionState.isBotThinking || sessionState.winner !== null) return;
 
-    const startedRevision = sessionState.boardRevision;
+    const startedRevision = stateRef.current.boardRevision;
     let isActive = true;
 
     botTimeoutRef.current = setTimeout(() => {
-      getBotMoveForLevelAsync(level, sessionState.pieces, sessionState.seed)
+      getBotMoveForLevelAsync(level, stateRef.current.pieces, stateRef.current.seed)
         .then(({ move: botMove, nextSeed }) => {
           if (!isActive) return;
 
           // Double check that the board revision hasn't changed since we started thinking
-          if (sessionState.boardRevision !== startedRevision) {
+          if (stateRef.current.boardRevision !== startedRevision) {
             console.warn('Bot move calculated but discarded due to board revision mismatch.');
             dispatch({ type: 'BOT_MOVE_FAILED' });
             return;
           }
 
           if (botMove) {
-            const botPiece = sessionState.pieces.find((p) => p.id === botMove.pieceId);
+            const botPiece = stateRef.current.pieces.find((p) => p.id === botMove.pieceId);
             if (botPiece) {
               dispatch({
                 type: 'BOT_MOVE_COMMITTED',
@@ -463,7 +468,7 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
         clearTimeout(botTimeoutRef.current);
       }
     };
-  }, [sessionState.isBotThinking, sessionState.winner, sessionState.boardRevision, level]);
+  }, [sessionState.isBotThinking, sessionState.winner, level]);
 
   // Effect to handle match saving asynchronously after winner is declared
   useEffect(() => {

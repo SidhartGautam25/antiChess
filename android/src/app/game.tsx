@@ -193,11 +193,21 @@ export default function GameScreen() {
       items.push(renderMiniPiece(PieceType.RIDER, `rider-${i}`));
     }
 
+    const containerHeight = isShortScreen ? 20 : 26;
+
     if (items.length === 0) {
-      return <Text style={styles.noCapturesText}>No pieces captured</Text>;
+      return (
+        <View style={{ height: containerHeight, justifyContent: 'center' }}>
+          <Text style={styles.noCapturesText}>No pieces captured</Text>
+        </View>
+      );
     }
 
-    return <View style={styles.capturedRow}>{items}</View>;
+    return (
+      <View style={[styles.capturedRow, { height: containerHeight, alignItems: 'center' }]}>
+        {items}
+      </View>
+    );
   };
 
   // Helper to format player names

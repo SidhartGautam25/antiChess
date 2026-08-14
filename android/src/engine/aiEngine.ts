@@ -87,13 +87,19 @@ export function minimax(
     return { score: evaluateBoard(pieces, config), move: null };
   }
   
+  // Construct boardMap for O(1) piece lookup
+  const boardMap: (Piece | null)[][] = Array(8).fill(null).map(() => Array(8).fill(null));
+  for (const p of pieces) {
+    boardMap[p.position.row][p.position.col] = p;
+  }
+
   const activePlayer: Player = isMaximizing ? 2 : 1;
   const playerPieces = pieces.filter((p) => p.player === activePlayer);
   
   // Generate all legal moves for active player
   const moves: Move[] = [];
   for (const piece of playerPieces) {
-    const legalTargets = getLegalMoves(piece, pieces);
+    const legalTargets = getLegalMoves(piece, pieces, boardMap);
     for (const target of legalTargets) {
       moves.push({
         pieceId: piece.id,
@@ -110,24 +116,20 @@ export function minimax(
   
   // Move sorting (captures first) to optimize alpha-beta pruning speed
   moves.sort((a, b) => {
-    const aIsCapture = pieces.some(
-      (p) => p.player !== activePlayer && p.position.row === a.to.row && p.position.col === a.to.col
-    );
-    const bIsCapture = pieces.some(
-      (p) => p.player !== activePlayer && p.position.row === b.to.row && p.position.col === b.to.col
-    );
+    const aIsCapture = boardMap[a.to.row][a.to.col] !== null;
+    const bIsCapture = boardMap[b.to.row][b.to.col] !== null;
     
     if (aIsCapture && !bIsCapture) return -1;
     if (!aIsCapture && bIsCapture) return 1;
     return 0;
   });
   
-  let bestMove: Move | null = null;
+  let bestMove: Move | null = moves[0] || null; // Initialize to first move to prevent null return if all evaluations equal
   
   if (isMaximizing) {
     let maxEval = -Infinity;
     for (const move of moves) {
-      const pieceToMove = pieces.find((p) => p.id === move.pieceId)!;
+      const pieceToMove = boardMap[move.from.row][move.from.col]!;
       const nextPiecesState = simulateMove(pieces, pieceToMove, move.to);
       
       const { score: evaluation } = minimax(
@@ -152,7 +154,7 @@ export function minimax(
   } else {
     let minEval = Infinity;
     for (const move of moves) {
-      const pieceToMove = pieces.find((p) => p.id === move.pieceId)!;
+      const pieceToMove = boardMap[move.from.row][move.from.col]!;
       const nextPiecesState = simulateMove(pieces, pieceToMove, move.to);
       
       const { score: evaluation } = minimax(
