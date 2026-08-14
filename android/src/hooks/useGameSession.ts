@@ -3,6 +3,7 @@ import { Piece, PieceType, Player, Position, GameMode, Move, MoveLogItem } from 
 import { INITIAL_PIECES } from '../constants/board';
 import { getLegalMoves, simulateMove, checkWinCondition } from '../engine/gameEngine';
 import { getBotMoveForLevelAsync } from '../engine/aiEngine';
+import { playSound } from '../utils/audio';
 
 const DEBUG_BOARD_STATE = false; // Set to true to enable detailed board logs in __DEV__
 
@@ -416,8 +417,13 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
 
   // Handle animation completion callback
   const handleAnimationComplete = useCallback((pieceId: string) => {
+    // Play chess move sound or capture sound
+    const lastMove = sessionState.moveLog[sessionState.moveLog.length - 1];
+    const isCapture = lastMove && lastMove.pieceId === pieceId && lastMove.capturedPieceId !== undefined;
+    playSound(isCapture ? 'capture' : 'move');
+
     dispatch({ type: 'ANIMATION_COMPLETED', pieceId, gameMode });
-  }, [gameMode]);
+  }, [gameMode, sessionState.moveLog]);
 
   // Effect to calculate bot move after player's animation has completed
   useEffect(() => {

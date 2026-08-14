@@ -21,8 +21,8 @@ function toBoardCoords(row: number, col: number, cellWidth: number, centeringOff
   };
 }
 
-// Soft ease-out: most of the move is a gentle glide into the destination (no hard brake).
-const MOVE_EASING = Easing.bezier(0.12, 0.8, 0.18, 1);
+// Smooth ease-out curve for natural chess piece sliding motion.
+const MOVE_EASING = Easing.out(Easing.quad);
 
 function getMoveDuration(fromRow: number, fromCol: number, toRow: number, toCol: number) {
   const cellDistance = Math.max(Math.abs(toRow - fromRow), Math.abs(toCol - fromCol));
@@ -30,10 +30,8 @@ function getMoveDuration(fromRow: number, fromCol: number, toRow: number, toCol:
     return 0;
   }
 
-  // Longer base + stronger distance scaling so big jumps don't feel rushed.
-  const linear = 600 + cellDistance * 165;
-  const longMoveBonus = cellDistance > 2 ? (cellDistance - 2) * 90 : 0;
-  return Math.min(1400, Math.max(620, linear + longMoveBonus));
+  // Snappy but distance-aware duration: 280ms base + 35ms per tile, max 450ms.
+  return Math.min(450, 280 + cellDistance * 35);
 }
 
 export default function AnimatedPiece({
