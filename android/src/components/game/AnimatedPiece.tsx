@@ -53,6 +53,9 @@ export default function AnimatedPiece({
   const targetYShared = useSharedValue(targetY);
   const currentRevision = useSharedValue(boardRevision);
 
+  // State to track visual position for piece label rendering (prevents immediate label change before slide)
+  const [displayPos, setDisplayPos] = React.useState({ row: piece.position.row, col: piece.position.col });
+
   useEffect(() => {
     currentRevision.value = boardRevision;
   }, [boardRevision]);
@@ -86,6 +89,8 @@ export default function AnimatedPiece({
         'worklet';
         if (finished && currentRevision.value === startedRevision) {
           runOnJS(onAnimationComplete)(piece.id);
+          // Sync visual label only when animation completes
+          runOnJS(setDisplayPos)({ row: piece.position.row, col: piece.position.col });
         }
       });
     } else {
@@ -95,6 +100,7 @@ export default function AnimatedPiece({
       targetXShared.value = nextTargetX;
       targetYShared.value = nextTargetY;
       progress.value = 1;
+      setDisplayPos({ row: piece.position.row, col: piece.position.col });
     }
 
     prevRow.current = piece.position.row;
@@ -124,8 +130,8 @@ export default function AnimatedPiece({
         pieceSize={pieceSize}
         isSelected={isSelected}
         onPress={onPress}
-        row={piece.position.row}
-        col={piece.position.col}
+        row={displayPos.row}
+        col={displayPos.col}
       />
     </Animated.View>
   );

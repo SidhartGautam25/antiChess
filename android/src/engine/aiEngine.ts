@@ -57,36 +57,6 @@ export function evaluateBoard(pieces: Piece[], config: LevelConfig): number {
     score -= (6 - distToCenter) * 4;
   }
   
-  // 3. Attack & Safety Threat weights
-  const p1Moves = p1Pieces.flatMap((piece) =>
-    getLegalMoves(piece, pieces).map((to) => ({ piece, to }))
-  );
-  const p2Moves = p2Pieces.flatMap((piece) =>
-    getLegalMoves(piece, pieces).map((to) => ({ piece, to }))
-  );
-  
-  // Safety evaluation: Check if Player 1 (Human) can capture Player 2 (AI) pieces
-  for (const move of p1Moves) {
-    const targetPiece = p2Pieces.find(
-      (p) => p.position.row === move.to.row && p.position.col === move.to.col
-    );
-    if (targetPiece) {
-      const pieceVal = getPieceValue(targetPiece.type);
-      score -= pieceVal * config.safetyWeight;
-    }
-  }
-  
-  // Aggression evaluation: Check if Player 2 (AI) can capture Player 1 (Human) pieces
-  for (const move of p2Moves) {
-    const targetPiece = p1Pieces.find(
-      (p) => p.position.row === move.to.row && p.position.col === move.to.col
-    );
-    if (targetPiece) {
-      const pieceVal = getPieceValue(targetPiece.type);
-      score += pieceVal * config.aggressionWeight;
-    }
-  }
-  
   return score;
 }
 

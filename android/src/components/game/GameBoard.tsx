@@ -32,7 +32,12 @@ export default function GameBoard({
   const handleLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
     if (width > 0 && height > 0) {
-      setParentDimensions({ width, height });
+      setParentDimensions((prev) => {
+        if (Math.abs(prev.width - width) < 1 && Math.abs(prev.height - height) < 1) {
+          return prev;
+        }
+        return { width, height };
+      });
     }
   };
 

@@ -216,6 +216,7 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
         if (action.gameMode === 'VS_BOT') {
           return {
             ...state,
+            activePlayer: 2,
             isBotThinking: true,
             animatingPieceId: null,
           };
