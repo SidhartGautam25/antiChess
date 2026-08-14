@@ -35,7 +35,7 @@ export default function GameScreen() {
     handleTileClick,
     undoMove,
     restartGame,
-    boardRevision,
+    animatingPieceId,
     onAnimationComplete,
   } = useGameSession({
     initialMode: mode,
@@ -275,7 +275,7 @@ export default function GameScreen() {
           activePlayer={activePlayer}
           isBotThinking={isBotThinking}
           onTileClick={handleTileClick}
-          boardRevision={boardRevision}
+          animatingPieceId={animatingPieceId}
           onAnimationComplete={onAnimationComplete}
         />
 

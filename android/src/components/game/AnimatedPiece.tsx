@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, View, Pressable, Platform } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, cancelAnimation, runOnJS } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, runOnJS } from 'react-native-reanimated';
 import { Piece, PieceType, Player } from '../../types/game';
 import { COLORS } from '../../constants/colors';
 import { FIXED_BOARD } from '../../constants/board';
@@ -10,8 +10,28 @@ interface AnimatedPieceProps {
   cellWidth: number;
   isSelected: boolean;
   onPress: () => void;
-  boardRevision: number;
+  animatingPieceId: string | null;
   onAnimationComplete: (pieceId: string) => void;
+}
+
+function toBoardCoords(row: number, col: number, cellWidth: number, centeringOffset: number) {
+  return {
+    x: col * cellWidth + centeringOffset,
+    y: row * cellWidth + centeringOffset,
+  };
+}
+
+// Smooth ease-out curve for natural chess piece sliding motion.
+const MOVE_EASING = Easing.out(Easing.quad);
+
+function getMoveDuration(fromRow: number, fromCol: number, toRow: number, toCol: number) {
+  const cellDistance = Math.max(Math.abs(toRow - fromRow), Math.abs(toCol - fromCol));
+  if (cellDistance === 0) {
+    return 0;
+  }
+
+  // Snappy but distance-aware duration: 280ms base + 35ms per tile, max 450ms.
+  return Math.min(450, 280 + cellDistance * 35);
 }
 
 export default function AnimatedPiece({
@@ -19,58 +39,83 @@ export default function AnimatedPiece({
   cellWidth,
   isSelected,
   onPress,
-  boardRevision,
+  animatingPieceId,
   onAnimationComplete,
 }: AnimatedPieceProps) {
   const isJumper = piece.type === PieceType.JUMPER;
 
-  // Width of individual tile content box (tile margins subtracted)
   const tileInnerWidth = cellWidth > 3 ? cellWidth - 3 : 0;
-  
-  // Custom size scaling per type to ensure visual balance
+
   let pieceSize = tileInnerWidth * 0.80;
   if (isJumper) {
-    pieceSize = tileInnerWidth * 0.74; // slightly smaller so rotated corners don't overflow the tile boundaries
+    pieceSize = tileInnerWidth * 0.74;
   }
-  
-  // Centering offset calculation relative to boardContainer:
-  // accounts for 2px gridContainer padding, 1.5px tile margin, and centers piece within tileInnerWidth
+
   const centeringOffset = 2 + (cellWidth - pieceSize) / 2;
 
-  // Refs to track previous layout/position for triggering slide animations
   const prevRow = React.useRef(piece.position.row);
   const prevCol = React.useRef(piece.position.col);
   const prevCellWidth = React.useRef(cellWidth);
   const prevCenteringOffset = React.useRef(centeringOffset);
 
-  // Target positions (computed dynamically)
-  const targetX = piece.position.col * cellWidth + centeringOffset;
-  const targetY = piece.position.row * cellWidth + centeringOffset;
+  const initialCoords = toBoardCoords(
+    piece.position.row,
+    piece.position.col,
+    cellWidth,
+    centeringOffset
+  );
 
-  // Shared values for coordinates, progress, and revision
-  const progress = useSharedValue(1); // 1 = animation complete / snapped
-  const startX = useSharedValue(targetX);
-  const startY = useSharedValue(targetY);
-  const targetXShared = useSharedValue(targetX);
-  const targetYShared = useSharedValue(targetY);
-  const currentRevision = useSharedValue(boardRevision);
-  const boardRevisionRef = React.useRef(boardRevision);
+  const translateX = useSharedValue(initialCoords.x);
+  const translateY = useSharedValue(initialCoords.y);
 
-  // State to track visual position for piece label rendering (prevents immediate label change before slide)
-  const [displayPos, setDisplayPos] = React.useState({ row: piece.position.row, col: piece.position.col });
+  const [displayPos, setDisplayPos] = React.useState({
+    row: piece.position.row,
+    col: piece.position.col,
+  });
 
+  const handleAnimationFinished = React.useCallback(
+    (pieceId: string) => {
+      onAnimationComplete(pieceId);
+    },
+    [onAnimationComplete]
+  );
+
+  const snapToLogicalPosition = React.useCallback(
+    (row: number, col: number) => {
+      const { x, y } = toBoardCoords(row, col, cellWidth, centeringOffset);
+      // Do not call cancelAnimation here — cancelling a finished withTiming can revert
+      // translateX/Y back to the animation's start value (the previous square).
+      translateX.value = x;
+      translateY.value = y;
+      setDisplayPos({ row, col });
+    },
+    [cellWidth, centeringOffset, translateX, translateY]
+  );
+
+  // Keep every non-animating piece locked to its logical board position.
+  // When the bot starts moving, this prevents other pieces from drifting visually.
   useEffect(() => {
-    currentRevision.value = boardRevision;
-    boardRevisionRef.current = boardRevision;
-  }, [boardRevision]);
+    if (animatingPieceId === piece.id) {
+      return;
+    }
 
-  // Update animated coordinates only when this piece moves or the board layout changes.
-  // Do NOT depend on boardRevision here — it increments on every move (including bot moves)
-  // and re-running this effect for unrelated pieces cancels in-flight animations and can
-  // desync shared values, making stationary pieces snap back to their old visual position.
+    snapToLogicalPosition(piece.position.row, piece.position.col);
+  }, [
+    animatingPieceId,
+    piece.id,
+    piece.position.row,
+    piece.position.col,
+    snapToLogicalPosition,
+  ]);
+
+  // Animate only the piece that actually moved; snap instantly on undo/reset.
   useEffect(() => {
-    const nextTargetX = piece.position.col * cellWidth + centeringOffset;
-    const nextTargetY = piece.position.row * cellWidth + centeringOffset;
+    const { x, y } = toBoardCoords(
+      piece.position.row,
+      piece.position.col,
+      cellWidth,
+      centeringOffset
+    );
 
     const positionChanged =
       prevRow.current !== piece.position.row || prevCol.current !== piece.position.col;
@@ -81,62 +126,54 @@ export default function AnimatedPiece({
       return;
     }
 
-    const startedRevision = boardRevisionRef.current;
+    if (positionChanged && animatingPieceId === piece.id) {
+      const fromRow = prevRow.current;
+      const fromCol = prevCol.current;
+      const targetRow = piece.position.row;
+      const targetCol = piece.position.col;
+      const duration = getMoveDuration(fromRow, fromCol, targetRow, targetCol);
+      const timingConfig = { duration, easing: MOVE_EASING };
 
-    if (positionChanged) {
-      cancelAnimation(progress);
+      // Update tile number immediately so it moves with the piece, not after arrival.
+      setDisplayPos({ row: targetRow, col: targetCol });
 
-      // Calculate current position to start from (to avoid sudden jumps)
-      const currentX = startX.value + (targetXShared.value - startX.value) * progress.value;
-      const currentY = startY.value + (targetYShared.value - startY.value) * progress.value;
-
-      startX.value = currentX;
-      startY.value = currentY;
-      targetXShared.value = nextTargetX;
-      targetYShared.value = nextTargetY;
-      progress.value = 0;
-
-      // Drive both coordinates from a single progress animation (called exactly once)
-      progress.value = withTiming(1, {
-        duration: 400,
-        easing: Easing.out(Easing.quad),
-      }, (finished) => {
+      translateX.value = withTiming(x, timingConfig, (finished) => {
         'worklet';
-        if (finished && currentRevision.value === startedRevision) {
-          runOnJS(onAnimationComplete)(piece.id);
-          // Sync visual label only when animation completes
-          runOnJS(setDisplayPos)({ row: piece.position.row, col: piece.position.col });
+        if (finished) {
+          runOnJS(handleAnimationFinished)(piece.id);
         }
       });
+      translateY.value = withTiming(y, timingConfig);
     } else {
-      // Layout-only change: rescale coordinates without touching animation progress
-      startX.value = nextTargetX;
-      startY.value = nextTargetY;
-      targetXShared.value = nextTargetX;
-      targetYShared.value = nextTargetY;
-      progress.value = 1;
-      setDisplayPos({ row: piece.position.row, col: piece.position.col });
+      snapToLogicalPosition(piece.position.row, piece.position.col);
     }
 
     prevRow.current = piece.position.row;
     prevCol.current = piece.position.col;
     prevCellWidth.current = cellWidth;
     prevCenteringOffset.current = centeringOffset;
-  }, [piece.position.row, piece.position.col, cellWidth, centeringOffset, onAnimationComplete, piece.id]);
+  }, [
+    piece.position.row,
+    piece.position.col,
+    cellWidth,
+    centeringOffset,
+    animatingPieceId,
+    piece.id,
+    snapToLogicalPosition,
+    handleAnimationFinished,
+    translateX,
+    translateY,
+  ]);
 
-  const animatedStyle = useAnimatedStyle(() => {
-    const curX = startX.value + (targetXShared.value - startX.value) * progress.value;
-    const curY = startY.value + (targetYShared.value - startY.value) * progress.value;
-    return {
-      transform: [
-        { translateX: curX },
-        { translateY: curY },
-      ],
-    };
-  });
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+    ],
+  }));
 
   return (
-    <Animated.View 
+    <Animated.View
       collapsable={false}
       style={[styles.animatedContainer, animatedStyle, { width: pieceSize, height: pieceSize }]}
     >
@@ -182,13 +219,12 @@ export function PieceView({
   const isPlayer1 = player === 1;
   const playerColors = isPlayer1 ? COLORS.player1 : COLORS.player2;
 
-  // Custom goti shape styling (Scout = Square, Rider = Circle)
   const gotiShapeStyle = isScout
     ? {
-        borderRadius: 8, // Rounded square
+        borderRadius: 8,
       }
     : {
-        borderRadius: pieceSize / 2, // Perfect circle
+        borderRadius: pieceSize / 2,
       };
 
   const innerRingStyle = isScout
@@ -199,22 +235,18 @@ export function PieceView({
         borderRadius: (pieceSize * 0.70) / 2,
       };
 
-  // High contrast labels: dark on light ivory piece, light on dark obsidian piece
   const labelColor = isPlayer1 ? '#1F2937' : '#FFFFFF';
-
-  // Get the value of the tile that the piece is currently sitting on
   const tileValue = FIXED_BOARD[row][col];
 
   if (isJumper) {
     return (
-      <Pressable 
-        style={styles.pressable} 
+      <Pressable
+        style={styles.pressable}
         onPress={onPress}
         android_ripple={{ color: playerColors.primary + '33', borderless: true }}
       >
         <View style={{ width: pieceSize, height: pieceSize, justifyContent: 'center', alignItems: 'center' }}>
-          {/* Base square */}
-          <View 
+          <View
             style={[
               styles.goti,
               {
@@ -227,8 +259,7 @@ export function PieceView({
               }
             ]}
           />
-          {/* 45 degree rotated square */}
-          <View 
+          <View
             style={[
               styles.goti,
               {
@@ -242,8 +273,7 @@ export function PieceView({
               }
             ]}
           />
-          {/* Center circle cover and label (masking inner intersecting borders) */}
-          <View 
+          <View
             style={[
               styles.innerRing,
               {
@@ -257,11 +287,10 @@ export function PieceView({
               }
             ]}
           >
-            {/* Display the value of the occupied tile */}
-            <Text 
+            <Text
               style={[
-                styles.label, 
-                { 
+                styles.label,
+                {
                   color: labelColor,
                   fontSize: cellWidth * 0.32,
                 }
@@ -276,12 +305,12 @@ export function PieceView({
   }
 
   return (
-    <Pressable 
-      style={styles.pressable} 
+    <Pressable
+      style={styles.pressable}
       onPress={onPress}
       android_ripple={{ color: playerColors.primary + '33', borderless: true }}
     >
-      <View 
+      <View
         style={[
           styles.goti,
           gotiShapeStyle,
@@ -293,8 +322,7 @@ export function PieceView({
           }
         ]}
       >
-        {/* Inner ring for premium classic look */}
-        <View 
+        <View
           style={[
             styles.innerRing,
             innerRingStyle,
@@ -305,11 +333,10 @@ export function PieceView({
             }
           ]}
         >
-          {/* Display the value of the occupied tile */}
-          <Text 
+          <Text
             style={[
-              styles.label, 
-              { 
+              styles.label,
+              {
                 color: labelColor,
                 fontSize: cellWidth * 0.32,
               }
