@@ -13,7 +13,7 @@ interface GameBoardProps {
   activePlayer: Player;
   isBotThinking: boolean;
   onTileClick: (row: number, col: number) => void;
-  boardRevision: number;
+  animatingPieceId: string | null;
   onAnimationComplete: (pieceId: string) => void;
 }
 
@@ -24,7 +24,7 @@ export default function GameBoard({
   activePlayer,
   isBotThinking,
   onTileClick,
-  boardRevision,
+  animatingPieceId,
   onAnimationComplete,
 }: GameBoardProps) {
   const [parentDimensions, setParentDimensions] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
@@ -115,7 +115,7 @@ export default function GameBoard({
                 cellWidth={cellWidth}
                 isSelected={isSelected}
                 onPress={() => onTileClick(piece.position.row, piece.position.col)}
-                boardRevision={boardRevision}
+                animatingPieceId={animatingPieceId}
                 onAnimationComplete={onAnimationComplete}
               />
             );

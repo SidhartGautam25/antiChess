@@ -541,6 +541,7 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
     changeSettings,
     setSelectedPieceId,
     boardRevision: sessionState.boardRevision,
+    animatingPieceId: sessionState.animatingPieceId,
     onAnimationComplete: handleAnimationComplete,
   };
 }
