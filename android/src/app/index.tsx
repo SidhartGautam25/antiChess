@@ -1,23 +1,44 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Platform, SafeAreaView } from 'react-native';
-import { useRouter } from 'expo-router';
+import React, { useState, useCallback } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, Dimensions, StatusBar } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS } from '../constants/colors';
+import { LEVEL_REGISTRY } from '../constants/levels';
 import { useGameHistory } from '../hooks/useGameHistory';
-import LevelSelector from '../components/ui/LevelSelector';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 
+const DIFFICULTY_KEY = '@ankachaal_difficulty_level';
+
 export default function HomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<'VS_BOT' | 'PASS_AND_PLAY'>('VS_BOT');
-  const [level, setLevel] = useState<number>(5); // Default is level 5: Strategist
-  const [showRules, setShowRules] = useState<boolean>(false);
+  const [level, setLevel] = useState<number>(5); // Default level 5: Strategist
   const { stats, loadHistory } = useGameHistory();
 
-  // Reload history and stats when screen mounts
-  useEffect(() => {
-    loadHistory();
-  }, [loadHistory]);
+  const { height: screenHeight } = Dimensions.get('window');
+  const isShortScreen = screenHeight < 750;
+  const isThreeButton = insets.bottom >= 30;
+
+  // Reload history and level settings whenever screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      const loadSavedSettings = async () => {
+        try {
+          const savedLevel = await AsyncStorage.getItem(DIFFICULTY_KEY);
+          if (savedLevel) {
+            setLevel(parseInt(savedLevel, 10));
+          }
+        } catch (err) {
+          console.error('Failed to load level settings:', err);
+        }
+      };
+      loadSavedSettings();
+      loadHistory();
+    }, [loadHistory])
+  );
 
   const handleStartGame = () => {
     router.push({
@@ -26,51 +47,61 @@ export default function HomeScreen() {
     });
   };
 
+  const getDifficultyCategory = (lvl: number) => {
+    if (lvl <= 3) return { name: 'Easy', color: COLORS.accentBlue };
+    if (lvl <= 6) return { name: 'Medium', color: COLORS.accentAmber };
+    if (lvl <= 8) return { name: 'Hard', color: '#D946EF' };
+    return { name: 'Extreme', color: COLORS.accentPink };
+  };
+
+  const cat = getDifficultyCategory(level);
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          
-          {/* Glowing Neon Header / Logo */}
-          <View style={styles.header}>
+    <View style={styles.screenContainer}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
+      <View style={{ height: insets.top, backgroundColor: COLORS.background }} />
+      
+      <View style={[
+        styles.container, 
+        { 
+          paddingHorizontal: isShortScreen ? 16 : 24,
+          paddingTop: isShortScreen ? 8 : 16,
+          paddingBottom: isThreeButton ? 16 : Math.max(insets.bottom, 16)
+        }
+      ]}>
+        
+        {/* Top: Premium Logo & Title Emblem */}
+        <View style={styles.headerSection}>
+          <View style={[
+            styles.logoEmblem,
+            isShortScreen && {
+              width: 70,
+              height: 70,
+              borderRadius: 35,
+              marginBottom: 8,
+            }
+          ]}>
             <Image 
               source={require('../../assets/images/game-logo.svg')} 
-              style={styles.logoImage} 
+              style={[styles.logoImage, isShortScreen && { width: 42, height: 42 }]} 
               contentFit="contain"
             />
-            <Text style={styles.logoText}>ANKA-CHAAL</Text>
-            <Text style={styles.tagline}>8x8 NUMBER-GRID TACTICAL CHESS</Text>
           </View>
+          <Text style={[styles.logoText, isShortScreen && { fontSize: 26, letterSpacing: 2 }]}>ANKA-CHAAL</Text>
+          <Text style={[styles.tagline, isShortScreen && { fontSize: 8, marginTop: 3 }]}>8x8 NUMBER-GRID TACTICAL CHESS</Text>
+        </View>
 
-          {/* Quick Statistics Banner */}
-          {stats && stats.totalGames > 0 && (
-            <View style={styles.statsBanner}>
-              <View style={styles.statItem}>
-                <Text style={styles.statLabel}>Games</Text>
-                <Text style={styles.statVal}>{stats.totalGames}</Text>
-              </View>
-              <View style={styles.divider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statLabel}>Win % vs Bot</Text>
-                <Text style={[styles.statVal, { color: COLORS.accentBlue }]}>
-                  {stats.winRateVsBot}%
-                </Text>
-              </View>
-              <View style={styles.divider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statLabel}>Avg Moves</Text>
-                <Text style={styles.statVal}>{stats.avgMoves}</Text>
-              </View>
-            </View>
-          )}
-
-          {/* Game Mode Selector */}
-          <View style={styles.section}>
-            <Text style={styles.sectionHeading}>SELECT GAME MODE</Text>
+        {/* Middle: Game Settings Container Card */}
+        <View style={styles.configSection}>
+          <View style={[styles.settingsCard, isShortScreen && { padding: 12 }]}>
+            <Text style={styles.cardHeading}>GAME CONFIGURATION</Text>
+            
+            {/* Segmented Pill Selector for Game Mode */}
             <View style={styles.modeContainer}>
               <TouchableOpacity
                 style={[
                   styles.modeButton,
+                  isShortScreen && { height: 40 },
                   mode === 'VS_BOT' && { borderColor: COLORS.accentBlue, backgroundColor: COLORS.surfaceSecondary }
                 ]}
                 onPress={() => setMode('VS_BOT')}
@@ -78,10 +109,10 @@ export default function HomeScreen() {
               >
                 <Ionicons 
                   name="hardware-chip-outline" 
-                  size={24} 
+                  size={isShortScreen ? 16 : 20} 
                   color={mode === 'VS_BOT' ? COLORS.accentBlue : COLORS.textSecondary} 
                 />
-                <Text style={[styles.modeText, mode === 'VS_BOT' && { color: COLORS.textPrimary }]}>
+                <Text style={[styles.modeText, isShortScreen && { fontSize: 12 }, mode === 'VS_BOT' && { color: COLORS.textPrimary }]}>
                   VS AI Bot
                 </Text>
               </TouchableOpacity>
@@ -89,6 +120,7 @@ export default function HomeScreen() {
               <TouchableOpacity
                 style={[
                   styles.modeButton,
+                  isShortScreen && { height: 40 },
                   mode === 'PASS_AND_PLAY' && { borderColor: COLORS.accentPink, backgroundColor: COLORS.surfaceSecondary }
                 ]}
                 onPress={() => setMode('PASS_AND_PLAY')}
@@ -96,194 +128,185 @@ export default function HomeScreen() {
               >
                 <Ionicons 
                   name="people-outline" 
-                  size={24} 
+                  size={isShortScreen ? 16 : 20} 
                   color={mode === 'PASS_AND_PLAY' ? COLORS.accentPink : COLORS.textSecondary} 
                 />
-                <Text style={[styles.modeText, mode === 'PASS_AND_PLAY' && { color: COLORS.textPrimary }]}>
+                <Text style={[styles.modeText, isShortScreen && { fontSize: 12 }, mode === 'PASS_AND_PLAY' && { color: COLORS.textPrimary }]}>
                   Pass & Play
                 </Text>
               </TouchableOpacity>
             </View>
+
+            {/* Level Settings Summary Button or Mode Info */}
+            {mode === 'VS_BOT' ? (
+              <TouchableOpacity
+                style={[styles.configLinkButton, isShortScreen && { height: 44, marginTop: 8 }]}
+                onPress={() => router.push('/config')}
+                activeOpacity={0.7}
+              >
+                <View style={styles.configLinkLeft}>
+                  <Ionicons name="options-outline" size={18} color={cat.color} />
+                  <Text style={[styles.configLinkText, isShortScreen && { fontSize: 12 }]}>
+                    AI Difficulty: <Text style={{ color: cat.color }}>{LEVEL_REGISTRY[level]?.name}</Text>
+                  </Text>
+                </View>
+                <View style={styles.configLinkRight}>
+                  <Text style={[styles.changeLabel, { color: cat.color }, isShortScreen && { fontSize: 9 }]}>CONFIGURE</Text>
+                  <Ionicons name="chevron-forward" size={14} color={cat.color} />
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <View style={[styles.modeInfoBox, isShortScreen && { padding: 8, marginTop: 8 }]}>
+                <Ionicons name="information-circle-outline" size={isShortScreen ? 16 : 18} color={COLORS.accentPink} />
+                <Text style={[styles.modeInfoText, isShortScreen && { fontSize: 10, lineHeight: 14 }]}>
+                  Pass & Play allows two players to play locally on this device. Take turns moving your pieces.
+                </Text>
+              </View>
+            )}
           </View>
+        </View>
 
-          {/* Level Selector - Only show if VS Bot mode is selected */}
-          {mode === 'VS_BOT' ? (
-            <View style={styles.levelSelectorContainer}>
-              <LevelSelector selectedLevel={level} onSelectLevel={setLevel} />
-            </View>
-          ) : (
-            <View style={styles.modeInfoBox}>
-              <Ionicons name="information-circle-outline" size={20} color={COLORS.accentPink} />
-              <Text style={styles.modeInfoText}>
-                Pass & Play allows two players to play locally on this device. Take turns moving your pieces.
-              </Text>
-            </View>
-          )}
-
-          {/* Start Action Button */}
+        {/* Bottom: Play Action, Stats & Footer Buttons */}
+        <View style={styles.actionSection}>
+          {/* Play Action Button (Gold Gradient Style) */}
           <TouchableOpacity 
             style={[
               styles.startButton,
-              { backgroundColor: mode === 'VS_BOT' ? COLORS.accentBlue : COLORS.accentPink }
+              isShortScreen && { height: 48, marginBottom: 12 },
+              { backgroundColor: COLORS.accentAmber }
             ]}
             onPress={handleStartGame}
             activeOpacity={0.8}
           >
-            <Text style={styles.startButtonText}>LAUNCH GAME</Text>
-            <Ionicons name="play-forward" size={20} color={COLORS.background} />
+            <Text style={[styles.startButtonText, isShortScreen && { fontSize: 15 }]}>PLAY GAME</Text>
+            <Ionicons name="play-forward" size={isShortScreen ? 16 : 20} color={COLORS.background} />
           </TouchableOpacity>
 
+          {/* Quick Statistics Capsule */}
+          {stats && stats.totalGames > 0 ? (
+            <View style={[styles.statsBanner, isShortScreen && { padding: 10, marginBottom: 12 }]}>
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>Games</Text>
+                <Text style={[styles.statVal, isShortScreen && { fontSize: 13 }]}>{stats.totalGames}</Text>
+              </View>
+              <View style={styles.divider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>Win % vs Bot</Text>
+                <Text style={[styles.statVal, isShortScreen && { fontSize: 13 }, { color: COLORS.accentBlue }]}>
+                  {stats.winRateVsBot}%
+                </Text>
+              </View>
+              <View style={styles.divider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>Avg Moves</Text>
+                <Text style={[styles.statVal, isShortScreen && { fontSize: 13 }]}>{stats.avgMoves}</Text>
+              </View>
+            </View>
+          ) : (
+            // Balance spacer when stats are not present
+            <View style={{ height: isShortScreen ? 0 : 16 }} />
+          )}
+
           {/* Secondary Action Buttons */}
-          <View style={styles.actionButtonsRow}>
+          <View style={[styles.actionButtonsRow, isShortScreen && { gap: 8 }]}>
             <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={() => setShowRules(!showRules)}
+              style={[styles.actionButton, isShortScreen && { height: 40 }]}
+              onPress={() => router.push('/rules')}
               activeOpacity={0.7}
             >
-              <Ionicons name="help-circle-outline" size={18} color={COLORS.textSecondary} />
-              <Text style={styles.actionButtonText}>Rules & Directions</Text>
+              <Ionicons name="help-circle-outline" size={isShortScreen ? 16 : 20} color={COLORS.accentBlue} />
+              <Text style={[styles.actionButtonText, isShortScreen && { fontSize: 11 }]}>Rules & Directions</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
-              style={styles.actionButton}
+              style={[styles.actionButton, isShortScreen && { height: 40 }]}
               onPress={() => router.push('/history')}
               activeOpacity={0.7}
             >
-              <Ionicons name="stats-chart" size={18} color={COLORS.textSecondary} />
-              <Text style={styles.actionButtonText}>History & Stats</Text>
+              <Ionicons name="stats-chart" size={isShortScreen ? 16 : 20} color={COLORS.accentBlue} />
+              <Text style={[styles.actionButtonText, isShortScreen && { fontSize: 11 }]}>History & Stats</Text>
             </TouchableOpacity>
           </View>
+        </View>
 
-          {/* Rules Dropdown Section */}
-          {showRules && (
-            <View style={styles.rulesBox}>
-              <Text style={styles.rulesTitle}>Anka-Chaal: The Dance of Numbers</Text>
-              
-              <Text style={styles.rulesIntro}>
-                Welcome to <Text style={styles.rulesBold}>Anka-Chaal</Text> (meaning "The Move of Numbers") — a fast-paced, high-voltage tactical chess game played on an 8x8 grid. Unlike traditional chess where pieces have fixed movements, in Anka-Chaal, <Text style={styles.rulesBold}>the board itself dictates the speed of your army</Text>!
-                {"\n\n"}
-                The number displayed inside each piece indicates its current momentum (<Text style={styles.rulesBold}>N</Text>), which changes dynamically as it steps across tiles of values <Text style={styles.rulesBold}>1, 2, or 3</Text>. Land on a 3, and your piece gains speed; land on a 1, and it slows to a tactical crawl.
-              </Text>
-
-              <Text style={styles.rulesSectionHeader}>Meet Your Army (6 Pieces Per Side)</Text>
-              
-              <View style={styles.rulePieceContainer}>
-                <Text style={styles.rulesBullet}>
-                  <Text style={styles.rulesBold}>• The Rider (Circular Shape • Weight: 3): </Text>
-                  The sliding spearhead of your army. Valued at <Text style={styles.rulesBold}>3 points</Text>, the Rider can slide along any of the 8 vectors (orthogonal or diagonal) <Text style={styles.rulesBold}>up to N steps</Text>. It can stop early or land on an enemy to capture them. However, it cannot jump over obstacles and is blocked by any piece in its way.
-                </Text>
-
-                <Text style={styles.rulesBullet}>
-                  <Text style={styles.rulesBold}>• The Jumper (Octagonal Shape • Weight: 2): </Text>
-                  The boundary-breaker! Valued at <Text style={styles.rulesBold}>2 points</Text>, the Jumper moves exactly <Text style={styles.rulesBold}>N steps</Text> either in a Knight-like L-shape (e.g. 2 steps straight and 1 perpendicular when N=3) OR in a straight orthogonal direction. It cannot move diagonally. Because it leaps over obstacles, it ignores intervening pieces, landing directly on its target square to capture.
-                </Text>
-
-                <Text style={styles.rulesBullet}>
-                  <Text style={styles.rulesBold}>• The Scout (Square Shape • Weight: 1): </Text>
-                  The stealthy sentinel. Valued at <Text style={styles.rulesBold}>1 point</Text>, the Scout must travel <Text style={styles.rulesBold}>exactly N steps</Text> along any of the 8 vectors. Unlike the Jumper, the Scout cannot leap; if any piece is in its intermediate path, it is blocked. However, it can capture an opponent occupying its exact destination.
-                </Text>
-              </View>
-
-              <Text style={styles.rulesSectionHeader}>The Climax: Victory & Tiebreakers</Text>
-              <Text style={styles.rulesIntro}>
-                Your ultimate goal is to wipe out all 6 of the opponent's pieces. 
-                {"\n\n"}
-                To keep matches intense and competitive, there is a strict limit of <Text style={styles.rulesBold}>50 moves</Text>. If the game reaches 50 moves, the player with the higher total weightage of remaining pieces on the board wins:
-                {"\n"}
-                • Rider = 3 points • Jumper = 2 points • Scout = 1 point
-                {"\n\n"}
-                If both players have the exact same remaining weightage, the game is declared a Draw!
-              </Text>
-            </View>
-          )}
-
-        </ScrollView>
       </View>
-    </SafeAreaView>
+      {isThreeButton && (
+        <View style={{ height: insets.bottom, backgroundColor: '#000000' }} />
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  screenContainer: {
     flex: 1,
     backgroundColor: COLORS.background,
   },
   container: {
     flex: 1,
-    paddingHorizontal: 20,
+    justifyContent: 'space-between',
   },
-  scrollContent: {
-    paddingTop: Platform.OS === 'ios' ? 20 : 40,
-    paddingBottom: 40,
-  },
-  header: {
+  headerSection: {
     alignItems: 'center',
-    marginBottom: 24,
+    justifyContent: 'center',
+    flex: 1.3,
   },
-  logoImage: {
+  configSection: {
+    justifyContent: 'center',
+    flex: 1.1,
+  },
+  actionSection: {
+    justifyContent: 'flex-end',
+    flex: 1.6,
+  },
+  logoEmblem: {
     width: 90,
     height: 90,
-    marginBottom: 16,
-    borderRadius: 20,
+    borderRadius: 45,
+    backgroundColor: COLORS.surfaceSecondary,
+    borderWidth: 2,
+    borderColor: COLORS.accentAmber,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+    shadowColor: COLORS.accentAmber,
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  logoImage: {
+    width: 52,
+    height: 52,
   },
   logoText: {
-    fontSize: 38,
+    fontSize: 32,
     fontWeight: '900',
     color: COLORS.textPrimary,
     letterSpacing: 4,
     textShadowColor: COLORS.glow1 + '80',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 12,
+    textShadowRadius: 10,
   },
   tagline: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: 'bold',
     color: COLORS.accentBlue,
     letterSpacing: 2,
-    marginTop: 6,
-  },
-  statsBanner: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statLabel: {
-    fontSize: 10,
-    color: COLORS.textMuted,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  statVal: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.textPrimary,
     marginTop: 4,
   },
-  divider: {
-    width: 1,
-    height: 24,
-    backgroundColor: COLORS.border,
+  settingsCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    padding: 16,
   },
-  section: {
-    marginBottom: 20,
-  },
-  sectionHeading: {
-    fontSize: 12,
+  cardHeading: {
+    fontSize: 11,
     fontWeight: 'bold',
     color: COLORS.textMuted,
     letterSpacing: 1.5,
-    marginBottom: 10,
+    marginBottom: 12,
     paddingHorizontal: 4,
   },
   modeContainer: {
@@ -293,8 +316,8 @@ const styles = StyleSheet.create({
   modeButton: {
     flex: 1,
     flexDirection: 'row',
-    height: 52,
-    backgroundColor: COLORS.surface,
+    height: 46,
+    backgroundColor: COLORS.background,
     borderWidth: 1.5,
     borderColor: COLORS.border,
     borderRadius: 12,
@@ -303,109 +326,133 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   modeText: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: 'bold',
     color: COLORS.textSecondary,
   },
-  levelSelectorContainer: {
-    height: 280,
-    marginBottom: 20,
+  configLinkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.background,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 48,
+    marginTop: 12,
+  },
+  configLinkLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  configLinkText: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: COLORS.textPrimary,
+  },
+  configLinkRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  changeLabel: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
   },
   modeInfoBox: {
     flexDirection: 'row',
-    backgroundColor: COLORS.surface,
-    padding: 16,
+    backgroundColor: COLORS.background,
+    padding: 12,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: COLORS.border,
-    gap: 10,
-    marginBottom: 24,
+    gap: 8,
+    marginTop: 12,
   },
   modeInfoText: {
-    fontSize: 13,
+    fontSize: 11,
     color: COLORS.textSecondary,
     flex: 1,
-    lineHeight: 18,
+    lineHeight: 16,
   },
   startButton: {
     flexDirection: 'row',
-    height: 56,
+    height: 52,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 8,
-    shadowColor: COLORS.glow1,
+    shadowColor: COLORS.accentAmber,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 8,
-    marginTop: 8,
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 6,
+    marginBottom: 16,
   },
   startButtonText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '900',
     color: COLORS.background,
     letterSpacing: 1.5,
   },
-  actionButtonsRow: {
+  statsBanner: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 20,
-    paddingHorizontal: 4,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-  },
-  actionButtonText: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    fontWeight: '500',
-  },
-  rulesBox: {
     backgroundColor: COLORS.surface,
     borderRadius: 16,
+    padding: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
-    padding: 16,
-    marginTop: 16,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
   },
-  rulesTitle: {
-    fontSize: 16,
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statLabel: {
+    fontSize: 9,
+    color: COLORS.textMuted,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  statVal: {
+    fontSize: 15,
     fontWeight: 'bold',
     color: COLORS.textPrimary,
-    marginBottom: 12,
+    marginTop: 4,
   },
-  rulesIntro: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    lineHeight: 18,
-    marginBottom: 12,
+  divider: {
+    width: 1,
+    height: 18,
+    backgroundColor: COLORS.border,
   },
-  rulesSectionHeader: {
-    fontSize: 14,
-    fontWeight: 'bold',
+  actionButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    height: 44,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  actionButtonText: {
+    fontSize: 12,
     color: COLORS.textPrimary,
-    marginTop: 14,
-    marginBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border + '40',
-    paddingBottom: 4,
-  },
-  rulePieceContainer: {
-    marginVertical: 4,
-    gap: 4,
-  },
-  rulesBullet: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    lineHeight: 18,
-    marginBottom: 10,
-  },
-  rulesBold: {
     fontWeight: 'bold',
-    color: COLORS.textPrimary,
   },
 });
+
+
+

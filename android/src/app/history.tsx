@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, Text, View, FlatList, TouchableOpacity, ActivityIndicator, Platform, SafeAreaView } from 'react-native';
+import { StyleSheet, Text, View, FlatList, TouchableOpacity, ActivityIndicator, Platform, Dimensions, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/colors';
 import { useGameHistory } from '../hooks/useGameHistory';
 import HeaderBar from '../components/ui/HeaderBar';
@@ -9,7 +10,12 @@ import { Ionicons } from '@expo/vector-icons';
 
 export default function HistoryScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { history, stats, isLoading, loadHistory, clearHistory } = useGameHistory();
+
+  const { height: screenHeight } = Dimensions.get('window');
+  const isShortScreen = screenHeight < 750;
+  const isThreeButton = insets.bottom >= 30;
 
   useEffect(() => {
     loadHistory();
@@ -43,8 +49,8 @@ export default function HistoryScreen() {
     const outcomeColor = isPlayer1Winner ? COLORS.player1.primary : COLORS.player2.primary;
 
     return (
-      <View style={styles.historyCard}>
-        <View style={styles.cardHeader}>
+      <View style={[styles.historyCard, isShortScreen && { padding: 10, marginBottom: 8 }]}>
+        <View style={[styles.cardHeader, isShortScreen && { paddingBottom: 6, marginBottom: 6 }]}>
           <View style={styles.cardType}>
             <Ionicons name={matchIcon} size={18} color={COLORS.textSecondary} />
             <Text style={styles.cardTypeText}>
@@ -83,20 +89,20 @@ export default function HistoryScreen() {
     if (!stats || stats.totalGames === 0) return null;
 
     return (
-      <View style={styles.dashboard}>
+      <View style={[styles.dashboard, isShortScreen && { marginBottom: 12 }]}>
         {/* Main Stats Cards */}
-        <View style={styles.statsGrid}>
-          <View style={styles.statCard}>
+        <View style={[styles.statsGrid, isShortScreen && { gap: 8, marginBottom: 8 }]}>
+          <View style={[styles.statCard, isShortScreen && { padding: 10 }]}>
             <Text style={styles.statCardLabel}>TOTAL GAMES</Text>
-            <Text style={styles.statCardValue}>{stats.totalGames}</Text>
+            <Text style={[styles.statCardValue, isShortScreen && { fontSize: 20, marginVertical: 4 }]}>{stats.totalGames}</Text>
             <Text style={styles.statCardSub}>
               {stats.vsBotGames} Bot • {stats.passAndPlayGames} Local
             </Text>
           </View>
 
-          <View style={styles.statCard}>
+          <View style={[styles.statCard, isShortScreen && { padding: 10 }]}>
             <Text style={styles.statCardLabel}>WIN RATE VS BOT</Text>
-            <Text style={[styles.statCardValue, { color: COLORS.accentBlue }]}>
+            <Text style={[styles.statCardValue, isShortScreen && { fontSize: 20, marginVertical: 4 }, { color: COLORS.accentBlue }]}>
               {stats.winRateVsBot}%
             </Text>
             <Text style={styles.statCardSub}>
@@ -106,15 +112,15 @@ export default function HistoryScreen() {
         </View>
 
         {/* Secondary averages card */}
-        <View style={styles.averagesCard}>
+        <View style={[styles.averagesCard, isShortScreen && { padding: 10 }]}>
           <View style={styles.averageItem}>
-            <Text style={styles.avgLabel}>Avg Moves / Match</Text>
-            <Text style={styles.avgValue}>{stats.avgMoves}</Text>
+            <Text style={[styles.avgLabel, isShortScreen && { fontSize: 10 }]}>Avg Moves / Match</Text>
+            <Text style={[styles.avgValue, isShortScreen && { fontSize: 14, marginTop: 2 }]}>{stats.avgMoves}</Text>
           </View>
           <View style={styles.verticalDivider} />
           <View style={styles.averageItem}>
-            <Text style={styles.avgLabel}>Avg Match Duration</Text>
-            <Text style={styles.avgValue}>{formatDuration(stats.avgDuration)}</Text>
+            <Text style={[styles.avgLabel, isShortScreen && { fontSize: 10 }]}>Avg Match Duration</Text>
+            <Text style={[styles.avgValue, isShortScreen && { fontSize: 14, marginTop: 2 }]}>{formatDuration(stats.avgDuration)}</Text>
           </View>
         </View>
       </View>
@@ -122,7 +128,10 @@ export default function HistoryScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.screenContainer}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
+      <View style={{ height: insets.top, backgroundColor: COLORS.background }} />
+
       <HeaderBar title="Match History & Stats" />
 
       <View style={styles.container}>
@@ -150,28 +159,37 @@ export default function HistoryScreen() {
             data={history}
             renderItem={renderHistoryItem}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[
+              styles.listContent,
+              { 
+                paddingBottom: isThreeButton ? 40 : Math.max(insets.bottom, 16),
+                paddingTop: isShortScreen ? 10 : 16,
+              }
+            ]}
             ListHeaderComponent={renderStatsDashboard()}
             ListFooterComponent={
               <TouchableOpacity 
-                style={styles.clearBtn} 
+                style={[styles.clearBtn, isShortScreen && { height: 38, marginTop: 8 }]} 
                 onPress={clearHistory}
                 activeOpacity={0.7}
               >
                 <Ionicons name="trash-outline" size={16} color={COLORS.accentPink} />
-                <Text style={styles.clearBtnText}>CLEAR HISTORY & STATS</Text>
+                <Text style={[styles.clearBtnText, isShortScreen && { fontSize: 12 }]}>CLEAR HISTORY & STATS</Text>
               </TouchableOpacity>
             }
             showsVerticalScrollIndicator={false}
           />
         )}
       </View>
-    </SafeAreaView>
+      {isThreeButton && (
+        <View style={{ height: insets.bottom, backgroundColor: '#000000' }} />
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  screenContainer: {
     flex: 1,
     backgroundColor: COLORS.background,
   },
@@ -185,8 +203,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   listContent: {
-    paddingTop: 16,
-    paddingBottom: 40,
   },
   dashboard: {
     marginBottom: 20,
@@ -367,3 +383,4 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
 });
+

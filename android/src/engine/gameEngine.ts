@@ -52,13 +52,21 @@ export function checkWinCondition(pieces: Piece[]): Player | null {
 /**
  * Calculates legal move destination positions for a given piece.
  */
-export function getLegalMoves(piece: Piece, pieces: Piece[]): Position[] {
+export function getLegalMoves(piece: Piece, pieces: Piece[], boardMap?: (Piece | null)[][]): Position[] {
   const legalMoves: Position[] = [];
   const startRow = piece.position.row;
   const startCol = piece.position.col;
   
   // N is determined by the number on the current tile of the board
   const N = FIXED_BOARD[startRow][startCol];
+
+  // O(1) grid lookup if boardMap is provided, otherwise fallback to O(N) array search
+  const getPieceAt = (r: number, c: number) => {
+    if (boardMap) {
+      return boardMap[r][c];
+    }
+    return pieces.find((p) => p.position.row === r && p.position.col === c);
+  };
   
   if (piece.type === PieceType.SCOUT) {
     // SCOUT (EXACT): Must move EXACTLY N steps
@@ -76,9 +84,7 @@ export function getLegalMoves(piece: Piece, pieces: Piece[]): Position[] {
         const interRow = startRow + dir.r * step;
         const interCol = startCol + dir.c * step;
         
-        const pieceAtInter = pieces.find(
-          (p) => p.position.row === interRow && p.position.col === interCol
-        );
+        const pieceAtInter = getPieceAt(interRow, interCol);
         
         if (pieceAtInter) {
           isBlocked = true;
@@ -91,9 +97,7 @@ export function getLegalMoves(piece: Piece, pieces: Piece[]): Position[] {
       }
       
       // Check target square
-      const pieceAtTarget = pieces.find(
-        (p) => p.position.row === targetRow && p.position.col === targetCol
-      );
+      const pieceAtTarget = getPieceAt(targetRow, targetCol);
       
       if (pieceAtTarget) {
         if (pieceAtTarget.player !== piece.player) {
@@ -118,9 +122,7 @@ export function getLegalMoves(piece: Piece, pieces: Piece[]): Position[] {
           break;
         }
         
-        const pieceAtTarget = pieces.find(
-          (p) => p.position.row === targetRow && p.position.col === targetCol
-        );
+        const pieceAtTarget = getPieceAt(targetRow, targetCol);
         
         if (!pieceAtTarget) {
           // Empty square is legal, keep going
@@ -169,9 +171,7 @@ export function getLegalMoves(piece: Piece, pieces: Piece[]): Position[] {
         continue;
       }
 
-      const pieceAtTarget = pieces.find(
-        (p) => p.position.row === targetRow && p.position.col === targetCol
-      );
+      const pieceAtTarget = getPieceAt(targetRow, targetCol);
 
       if (pieceAtTarget) {
         if (pieceAtTarget.player !== piece.player) {

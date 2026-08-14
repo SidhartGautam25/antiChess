@@ -58,7 +58,7 @@ export const LEVEL_REGISTRY: Record<number, LevelConfig> = {
   7: {
     level: 7,
     name: 'Commander',
-    depth: 4,
+    depth: 3,
     blunderRate: 0.08,
     aggressionWeight: 1.0,
     positionWeight: 15,
@@ -67,7 +67,7 @@ export const LEVEL_REGISTRY: Record<number, LevelConfig> = {
   8: {
     level: 8,
     name: 'Expert',
-    depth: 4,
+    depth: 3,
     blunderRate: 0.04,
     aggressionWeight: 1.1,
     positionWeight: 18,
@@ -76,7 +76,7 @@ export const LEVEL_REGISTRY: Record<number, LevelConfig> = {
   9: {
     level: 9,
     name: 'Champion',
-    depth: 5,
+    depth: 4,
     blunderRate: 0.02,
     aggressionWeight: 1.2,
     positionWeight: 22,
@@ -85,7 +85,7 @@ export const LEVEL_REGISTRY: Record<number, LevelConfig> = {
   10: {
     level: 10,
     name: 'Grandmaster',
-    depth: 5,
+    depth: 4,
     blunderRate: 0.00,
     aggressionWeight: 1.3,
     positionWeight: 25,

@@ -21,7 +21,13 @@ export default function LevelSelector({ selectedLevel, onSelectLevel }: LevelSel
     <View style={styles.container}>
       <Text style={styles.heading}>AI DIFFICULTY LEVEL</Text>
       
-      <ScrollView contentContainerStyle={styles.grid} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        horizontal 
+        nestedScrollEnabled={true}
+        keyboardShouldPersistTaps="handled"
+        showsHorizontalScrollIndicator={false} 
+        contentContainerStyle={styles.horizontalList}
+      >
         {Object.values(LEVEL_REGISTRY).map((config) => {
           const isSelected = selectedLevel === config.level;
           const diffColor = getDifficultyColor(config.level);
@@ -35,9 +41,9 @@ export default function LevelSelector({ selectedLevel, onSelectLevel }: LevelSel
                   borderColor: diffColor, 
                   backgroundColor: COLORS.surfaceSecondary,
                   shadowColor: diffColor,
-                  shadowOpacity: 0.3,
-                  shadowRadius: 8,
-                  elevation: 6,
+                  shadowOpacity: 0.4,
+                  shadowRadius: 10,
+                  elevation: 8,
                 }
               ]}
               onPress={() => onSelectLevel(config.level)}
@@ -49,12 +55,10 @@ export default function LevelSelector({ selectedLevel, onSelectLevel }: LevelSel
                 </Text>
               </View>
               
-              <View style={styles.textContainer}>
-                <Text style={styles.levelName}>{config.name}</Text>
-                <Text style={styles.subtext}>
-                  Difficulty: {config.level <= 3 ? 'Easy' : config.level <= 6 ? 'Medium' : config.level <= 8 ? 'Hard' : 'Extreme'}
-                </Text>
-              </View>
+              <Text style={styles.levelName} numberOfLines={1}>{config.name}</Text>
+              <Text style={[styles.difficultyText, { color: diffColor }]}>
+                {config.level <= 3 ? 'Easy' : config.level <= 6 ? 'Medium' : config.level <= 8 ? 'Hard' : 'Extreme'}
+              </Text>
             </TouchableOpacity>
           );
         })}
@@ -66,7 +70,6 @@ export default function LevelSelector({ selectedLevel, onSelectLevel }: LevelSel
 const styles = StyleSheet.create({
   container: {
     marginVertical: 12,
-    flex: 1,
   },
   heading: {
     fontSize: 12,
@@ -76,42 +79,44 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingHorizontal: 4,
   },
-  grid: {
-    gap: 10,
-    paddingBottom: 16,
+  horizontalList: {
+    gap: 12,
+    paddingHorizontal: 4,
+    paddingBottom: 12,
   },
   card: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    width: 110,
+    height: 125,
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: 16,
+    borderWidth: 1.5,
     borderColor: COLORS.border,
     padding: 12,
-  },
-  badge: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  badge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
   badgeText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  textContainer: {
-    marginLeft: 14,
-    flex: 1,
-  },
-  levelName: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: COLORS.textPrimary,
   },
-  subtext: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginTop: 2,
+  levelName: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: COLORS.textPrimary,
+    textAlign: 'center',
+  },
+  difficultyText: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 4,
+    textTransform: 'uppercase',
   },
 });

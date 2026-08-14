@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { COLORS } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,7 +14,7 @@ export default function HeaderBar({ title, showBackButton = true, rightElement }
   const router = useRouter();
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.headerBar}>
       <View style={styles.container}>
         <View style={styles.leftContainer}>
           {showBackButton && (
@@ -38,16 +38,15 @@ export default function HeaderBar({ title, showBackButton = true, rightElement }
           {rightElement}
         </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  headerBar: {
     backgroundColor: COLORS.background,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border + '80', // semi-transparent border
-    paddingTop: Platform.OS === 'android' ? 36 : 0, // simple header spacing adjustment for android
   },
   container: {
     height: 56,
@@ -89,3 +88,4 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
 });
+

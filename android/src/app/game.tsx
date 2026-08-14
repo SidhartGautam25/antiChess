@@ -1,6 +1,7 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, Modal, Platform, SafeAreaView } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, Modal, Platform, Dimensions, StatusBar } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/colors';
 import { useGameHistory } from '../hooks/useGameHistory';
 import { useGameSession } from '../hooks/useGameSession';
@@ -13,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 export default function GameScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
   
   // Parse parameters from route
   const mode = (params.mode as GameMode) || 'VS_BOT';
@@ -33,11 +35,17 @@ export default function GameScreen() {
     handleTileClick,
     undoMove,
     restartGame,
+    boardRevision,
+    onAnimationComplete,
   } = useGameSession({
     initialMode: mode,
     initialLevel: level,
     onSaveMatch: saveMatch,
   });
+
+  const { height: screenHeight } = Dimensions.get('window');
+  const isShortScreen = screenHeight < 750;
+  const isThreeButton = insets.bottom >= 30;
 
   // Calculate captured pieces
   const getCapturedCount = (player: Player, type: PieceType) => {
@@ -69,7 +77,7 @@ export default function GameScreen() {
     const items = [];
     
     const renderMiniPiece = (type: PieceType, key: string) => {
-      const size = 24;
+      const size = isShortScreen ? 18 : 24;
       const isScout = type === PieceType.SCOUT;
       const isRider = type === PieceType.RIDER;
       const isJumper = type === PieceType.JUMPER;
@@ -185,11 +193,21 @@ export default function GameScreen() {
       items.push(renderMiniPiece(PieceType.RIDER, `rider-${i}`));
     }
 
+    const containerHeight = isShortScreen ? 20 : 26;
+
     if (items.length === 0) {
-      return <Text style={styles.noCapturesText}>No pieces captured</Text>;
+      return (
+        <View style={{ height: containerHeight, justifyContent: 'center' }}>
+          <Text style={styles.noCapturesText}>No pieces captured</Text>
+        </View>
+      );
     }
 
-    return <View style={styles.capturedRow}>{items}</View>;
+    return (
+      <View style={[styles.capturedRow, { height: containerHeight, alignItems: 'center' }]}>
+        {items}
+      </View>
+    );
   };
 
   // Helper to format player names
@@ -203,16 +221,19 @@ export default function GameScreen() {
     : (mode === 'VS_BOT' ? COLORS.bot.primary : COLORS.player2.primary);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.screenContainer}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
+      <View style={{ height: insets.top, backgroundColor: COLORS.background }} />
+
       {/* Header Bar */}
       <HeaderBar 
         title={mode === 'VS_BOT' ? `Anka-Chaal (${LEVEL_REGISTRY[level]?.name})` : 'Anka-Chaal (Local)'} 
       />
 
-      <View style={styles.container}>
+      <View style={[styles.container, isShortScreen && { paddingHorizontal: 4 }]}>
         
         {/* Top Status Bar: Bot / Player 2 status */}
-        <View style={styles.playerPanel}>
+        <View style={[styles.playerPanel, isShortScreen && { padding: 8, marginVertical: 2 }]}>
           <View style={styles.playerInfo}>
             <View 
               style={[
@@ -220,7 +241,7 @@ export default function GameScreen() {
                 { backgroundColor: mode === 'VS_BOT' ? COLORS.bot.primary : COLORS.player2.primary }
               ]} 
             />
-            <Text style={styles.playerName}>
+            <Text style={[styles.playerName, isShortScreen && { fontSize: 12 }]}>
               {mode === 'VS_BOT' ? 'AI Bot (Ebony)' : 'Player 2 (Ebony)'}
             </Text>
           </View>
@@ -228,21 +249,25 @@ export default function GameScreen() {
         </View>
 
         {/* Turn indicator banner */}
-        <View style={[styles.turnBanner, { borderColor: activeColor + '40' }]}>
+        <View style={[
+          styles.turnBanner, 
+          { borderColor: activeColor + '40' },
+          isShortScreen && { height: 38, marginVertical: 2, paddingHorizontal: 12 }
+        ]}>
           {isBotThinking ? (
             <View style={styles.thinkingContainer}>
               <ActivityIndicator size="small" color={COLORS.bot.primary} style={{ marginRight: 8 }} />
-              <Text style={[styles.turnText, { color: COLORS.bot.primary }]}>AI Bot is planning...</Text>
+              <Text style={[styles.turnText, { color: COLORS.bot.primary }, isShortScreen && { fontSize: 12 }]}>AI Bot is planning...</Text>
             </View>
           ) : (
-            <Text style={[styles.turnText, { color: activeColor }]}>
+            <Text style={[styles.turnText, { color: activeColor }, isShortScreen && { fontSize: 12 }]}>
               {winner ? 'GAME OVER' : `${getActivePlayerName().toUpperCase()}'S TURN`}
             </Text>
           )}
-          <Text style={styles.movesCountText}>Moves: {movesCount}/50 (Remaining: {50 - movesCount})</Text>
+          <Text style={[styles.movesCountText, isShortScreen && { fontSize: 11 }]}>Moves: {movesCount}/50</Text>
         </View>
 
-        {/* 5x5 Game Board */}
+        {/* 8x8 Game Board */}
         <GameBoard
           pieces={pieces}
           selectedPieceId={selectedPieceId}
@@ -250,36 +275,64 @@ export default function GameScreen() {
           activePlayer={activePlayer}
           isBotThinking={isBotThinking}
           onTileClick={handleTileClick}
+          boardRevision={boardRevision}
+          onAnimationComplete={onAnimationComplete}
         />
 
         {/* Bottom Status Bar: Player 1 status */}
-        <View style={styles.playerPanel}>
+        <View style={[styles.playerPanel, isShortScreen && { padding: 8, marginVertical: 2 }]}>
           <View style={styles.playerInfo}>
             <View style={[styles.playerIndicatorCircle, { backgroundColor: COLORS.player1.primary }]} />
-            <Text style={styles.playerName}>Player 1 (Ivory)</Text>
+            <Text style={[styles.playerName, isShortScreen && { fontSize: 12 }]}>Player 1 (Ivory)</Text>
           </View>
           {renderCapturedBar(2)}
         </View>
 
         {/* Controller Panel */}
-        <View style={styles.controlPanel}>
+        <View style={[
+          styles.controlPanel, 
+          { marginBottom: isThreeButton ? 12 : Math.max(insets.bottom, 12) },
+          isShortScreen && { marginVertical: 2 }
+        ]}>
           <TouchableOpacity
-            style={[styles.controlButton, !canUndo && styles.controlButtonDisabled]}
+            style={[
+              styles.controlButton, 
+              !canUndo && styles.controlButtonDisabled,
+              isShortScreen && { height: 38 }
+            ]}
             onPress={undoMove}
             disabled={!canUndo}
             activeOpacity={0.7}
           >
-            <Ionicons name="arrow-undo-outline" size={20} color={canUndo ? COLORS.textPrimary : COLORS.textMuted} />
-            <Text style={[styles.controlButtonText, !canUndo && { color: COLORS.textMuted }]}>Undo</Text>
+            <Ionicons 
+              name="arrow-undo-outline" 
+              size={isShortScreen ? 16 : 20} 
+              color={canUndo ? COLORS.textPrimary : COLORS.textMuted} 
+            />
+            <Text style={[
+              styles.controlButtonText, 
+              isShortScreen && { fontSize: 12 },
+              !canUndo && { color: COLORS.textMuted }
+            ]}>Undo</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.controlButton}
+            style={[
+              styles.controlButton,
+              isShortScreen && { height: 38 }
+            ]}
             onPress={restartGame}
             activeOpacity={0.7}
           >
-            <Ionicons name="refresh-outline" size={20} color={COLORS.textPrimary} />
-            <Text style={styles.controlButtonText}>Reset</Text>
+            <Ionicons 
+              name="refresh-outline" 
+              size={isShortScreen ? 16 : 20} 
+              color={COLORS.textPrimary} 
+            />
+            <Text style={[
+              styles.controlButtonText,
+              isShortScreen && { fontSize: 12 }
+            ]}>Reset</Text>
           </TouchableOpacity>
         </View>
 
@@ -368,12 +421,15 @@ export default function GameScreen() {
         </Modal>
 
       </View>
-    </SafeAreaView>
+      {isThreeButton && (
+        <View style={{ height: insets.bottom, backgroundColor: '#000000' }} />
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  screenContainer: {
     flex: 1,
     backgroundColor: COLORS.background,
   },
@@ -381,7 +437,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 3,
     justifyContent: 'space-between',
-    paddingBottom: Platform.OS === 'ios' ? 10 : 20,
   },
   playerPanel: {
     flexDirection: 'row',
@@ -596,3 +651,4 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
 });
+

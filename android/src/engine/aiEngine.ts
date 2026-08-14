@@ -57,36 +57,6 @@ export function evaluateBoard(pieces: Piece[], config: LevelConfig): number {
     score -= (6 - distToCenter) * 4;
   }
   
-  // 3. Attack & Safety Threat weights
-  const p1Moves = p1Pieces.flatMap((piece) =>
-    getLegalMoves(piece, pieces).map((to) => ({ piece, to }))
-  );
-  const p2Moves = p2Pieces.flatMap((piece) =>
-    getLegalMoves(piece, pieces).map((to) => ({ piece, to }))
-  );
-  
-  // Safety evaluation: Check if Player 1 (Human) can capture Player 2 (AI) pieces
-  for (const move of p1Moves) {
-    const targetPiece = p2Pieces.find(
-      (p) => p.position.row === move.to.row && p.position.col === move.to.col
-    );
-    if (targetPiece) {
-      const pieceVal = getPieceValue(targetPiece.type);
-      score -= pieceVal * config.safetyWeight;
-    }
-  }
-  
-  // Aggression evaluation: Check if Player 2 (AI) can capture Player 1 (Human) pieces
-  for (const move of p2Moves) {
-    const targetPiece = p1Pieces.find(
-      (p) => p.position.row === move.to.row && p.position.col === move.to.col
-    );
-    if (targetPiece) {
-      const pieceVal = getPieceValue(targetPiece.type);
-      score += pieceVal * config.aggressionWeight;
-    }
-  }
-  
   return score;
 }
 
@@ -117,13 +87,19 @@ export function minimax(
     return { score: evaluateBoard(pieces, config), move: null };
   }
   
+  // Construct boardMap for O(1) piece lookup
+  const boardMap: (Piece | null)[][] = Array(8).fill(null).map(() => Array(8).fill(null));
+  for (const p of pieces) {
+    boardMap[p.position.row][p.position.col] = p;
+  }
+
   const activePlayer: Player = isMaximizing ? 2 : 1;
   const playerPieces = pieces.filter((p) => p.player === activePlayer);
   
   // Generate all legal moves for active player
   const moves: Move[] = [];
   for (const piece of playerPieces) {
-    const legalTargets = getLegalMoves(piece, pieces);
+    const legalTargets = getLegalMoves(piece, pieces, boardMap);
     for (const target of legalTargets) {
       moves.push({
         pieceId: piece.id,
@@ -140,24 +116,20 @@ export function minimax(
   
   // Move sorting (captures first) to optimize alpha-beta pruning speed
   moves.sort((a, b) => {
-    const aIsCapture = pieces.some(
-      (p) => p.player !== activePlayer && p.position.row === a.to.row && p.position.col === a.to.col
-    );
-    const bIsCapture = pieces.some(
-      (p) => p.player !== activePlayer && p.position.row === b.to.row && p.position.col === b.to.col
-    );
+    const aIsCapture = boardMap[a.to.row][a.to.col] !== null;
+    const bIsCapture = boardMap[b.to.row][b.to.col] !== null;
     
     if (aIsCapture && !bIsCapture) return -1;
     if (!aIsCapture && bIsCapture) return 1;
     return 0;
   });
   
-  let bestMove: Move | null = null;
+  let bestMove: Move | null = moves[0] || null; // Initialize to first move to prevent null return if all evaluations equal
   
   if (isMaximizing) {
     let maxEval = -Infinity;
     for (const move of moves) {
-      const pieceToMove = pieces.find((p) => p.id === move.pieceId)!;
+      const pieceToMove = boardMap[move.from.row][move.from.col]!;
       const nextPiecesState = simulateMove(pieces, pieceToMove, move.to);
       
       const { score: evaluation } = minimax(
@@ -182,7 +154,7 @@ export function minimax(
   } else {
     let minEval = Infinity;
     for (const move of moves) {
-      const pieceToMove = pieces.find((p) => p.id === move.pieceId)!;
+      const pieceToMove = boardMap[move.from.row][move.from.col]!;
       const nextPiecesState = simulateMove(pieces, pieceToMove, move.to);
       
       const { score: evaluation } = minimax(
@@ -208,10 +180,27 @@ export function minimax(
 }
 
 /**
- * Returns the bot's chosen move based on active pieces and the selected AI difficulty level.
+ * A simple seedable LCG (Linear Congruential Generator) PRNG.
  */
-export function getBotMoveForLevel(levelNumber: number, pieces: Piece[]): Move | null {
+export function seedRandom(seed: number): () => number {
+  let currentSeed = seed;
+  return () => {
+    currentSeed = (currentSeed * 1664525 + 1013904223) % 4294967296;
+    return currentSeed / 4294967296;
+  };
+}
+
+/**
+ * Returns the bot's chosen move based on active pieces and the selected AI difficulty level.
+ * Uses a seedable random generator for deterministic bot blunders.
+ */
+export function getBotMoveForLevel(
+  levelNumber: number,
+  pieces: Piece[],
+  seed: number
+): { move: Move | null; nextSeed: number } {
   const config = LEVEL_REGISTRY[levelNumber] || LEVEL_REGISTRY[1];
+  const rng = seedRandom(seed);
   
   // Find all legal moves for Player 2 (AI)
   const botPieces = pieces.filter((p) => p.player === 2);
@@ -228,17 +217,40 @@ export function getBotMoveForLevel(levelNumber: number, pieces: Piece[]): Move |
   }
   
   if (allMoves.length === 0) {
-    return null;
+    return { move: null, nextSeed: Math.floor(rng() * 1000000) };
   }
+  
+  let chosenMove: Move | null = null;
   
   // LEVEL BLUNDER LOGIC:
   // Randomly blunder a move on lower levels to simulate human-like skill level
-  if (Math.random() < config.blunderRate) {
-    const randomIndex = Math.floor(Math.random() * allMoves.length);
-    return allMoves[randomIndex];
+  if (rng() < config.blunderRate) {
+    const randomIndex = Math.floor(rng() * allMoves.length);
+    chosenMove = allMoves[randomIndex];
+  } else {
+    // Run Minimax search to find the optimal move
+    const { move } = minimax(pieces, config.depth, -Infinity, Infinity, true, config);
+    chosenMove = move;
   }
   
-  // Run Minimax search to find the optimal move
-  const { move } = minimax(pieces, config.depth, -Infinity, Infinity, true, config);
-  return move;
+  return {
+    move: chosenMove,
+    nextSeed: Math.floor(rng() * 1000000),
+  };
+}
+
+/**
+ * Async boundary wrapper for the bot's move calculation.
+ * Returns a Promise to avoid blocking the main UI thread immediately.
+ */
+export async function getBotMoveForLevelAsync(
+  levelNumber: number,
+  pieces: Piece[],
+  seed: number
+): Promise<{ move: Move | null; nextSeed: number }> {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve(getBotMoveForLevel(levelNumber, pieces, seed));
+    }, 0);
+  });
 }

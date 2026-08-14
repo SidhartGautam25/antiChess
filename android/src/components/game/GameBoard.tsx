@@ -13,6 +13,8 @@ interface GameBoardProps {
   activePlayer: Player;
   isBotThinking: boolean;
   onTileClick: (row: number, col: number) => void;
+  boardRevision: number;
+  onAnimationComplete: (pieceId: string) => void;
 }
 
 export default function GameBoard({
@@ -22,18 +24,27 @@ export default function GameBoard({
   activePlayer,
   isBotThinking,
   onTileClick,
+  boardRevision,
+  onAnimationComplete,
 }: GameBoardProps) {
-  const [boardWidth, setBoardWidth] = useState<number>(0);
-  
-  // Calculate cellWidth based on the grid area (subtracting 4px borders and 4px paddings = 8px total)
-  const cellWidth = boardWidth > 0 ? (boardWidth - 8) / BOARD_SIZE : 0;
+  const [parentDimensions, setParentDimensions] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
 
   const handleLayout = (event: LayoutChangeEvent) => {
-    const { width } = event.nativeEvent.layout;
-    if (width > 0) {
-      setBoardWidth(width);
+    const { width, height } = event.nativeEvent.layout;
+    if (width > 0 && height > 0) {
+      setParentDimensions((prev) => {
+        if (Math.abs(prev.width - width) < 1 && Math.abs(prev.height - height) < 1) {
+          return prev;
+        }
+        return { width, height };
+      });
     }
   };
+
+  const boardSize = Math.min(parentDimensions.width, parentDimensions.height);
+  
+  // Calculate cellWidth based on the grid area (subtracting 4px borders and 4px paddings = 8px total)
+  const cellWidth = boardSize > 0 ? (boardSize - 8) / BOARD_SIZE : 0;
 
   // Helper to check if a tile is a legal move target
   const checkIsLegal = (row: number, col: number) => {
@@ -77,46 +88,53 @@ export default function GameBoard({
   };
 
   return (
-    <View style={styles.wrapper}>
-      <View 
-        style={styles.boardContainer} 
-        onLayout={handleLayout}
-      >
-        {/* Render the background board tiles grid */}
-        <View style={styles.gridContainer}>
-          {renderTiles()}
-        </View>
+    <View style={styles.wrapper} onLayout={handleLayout}>
+      {boardSize > 100 && (
+        <View 
+          style={[
+            styles.boardContainer,
+            {
+              width: boardSize,
+              height: boardSize,
+            }
+          ]}
+        >
+          {/* Render the background board tiles grid */}
+          <View style={styles.gridContainer}>
+            {renderTiles()}
+          </View>
 
-        {/* Overlay the animated pieces relative to the boardContainer (which starts inside the border) */}
-        {boardWidth > 0 && pieces.map((piece) => {
-          const isSelected = selectedPieceId === piece.id;
-          
-          return (
-            <AnimatedPiece
-              key={piece.id}
-              piece={piece}
-              cellWidth={cellWidth}
-              isSelected={isSelected}
-              onPress={() => onTileClick(piece.position.row, piece.position.col)}
-            />
-          );
-        })}
-      </View>
+          {/* Overlay the animated pieces relative to the boardContainer */}
+          {pieces.map((piece) => {
+            const isSelected = selectedPieceId === piece.id;
+            
+            return (
+              <AnimatedPiece
+                key={piece.id}
+                piece={piece}
+                cellWidth={cellWidth}
+                isSelected={isSelected}
+                onPress={() => onTileClick(piece.position.row, piece.position.col)}
+                boardRevision={boardRevision}
+                onAnimationComplete={onAnimationComplete}
+              />
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrapper: {
-    width: '100%',
-    aspectRatio: 1,
-    padding: 0,
+    flex: 1,
+    alignSelf: 'stretch',
     alignItems: 'center',
     justifyContent: 'center',
+    marginVertical: 4,
   },
   boardContainer: {
-    width: '100%',
-    height: '100%',
     backgroundColor: COLORS.background,
     borderRadius: 16,
     borderWidth: 2,
@@ -131,10 +149,11 @@ const styles = StyleSheet.create({
   },
   gridContainer: {
     flex: 1,
-    padding: 2, // Reduced padding from 3 to 2
+    padding: 2,
   },
   row: {
     flex: 1,
     flexDirection: 'row',
   },
 });
+

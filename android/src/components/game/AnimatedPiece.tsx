@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, View, Pressable, Platform } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
-import { Piece, PieceType } from '../../types/game';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, cancelAnimation, runOnJS } from 'react-native-reanimated';
+import { Piece, PieceType, Player } from '../../types/game';
 import { COLORS } from '../../constants/colors';
 import { FIXED_BOARD } from '../../constants/board';
 
@@ -10,15 +10,19 @@ interface AnimatedPieceProps {
   cellWidth: number;
   isSelected: boolean;
   onPress: () => void;
+  boardRevision: number;
+  onAnimationComplete: (pieceId: string) => void;
 }
 
-export default function AnimatedPiece({ piece, cellWidth, isSelected, onPress }: AnimatedPieceProps) {
-  const isScout = piece.type === PieceType.SCOUT;
-  const isRider = piece.type === PieceType.RIDER;
+export default function AnimatedPiece({
+  piece,
+  cellWidth,
+  isSelected,
+  onPress,
+  boardRevision,
+  onAnimationComplete,
+}: AnimatedPieceProps) {
   const isJumper = piece.type === PieceType.JUMPER;
-
-  const isPlayer1 = piece.player === 1;
-  const playerColors = isPlayer1 ? COLORS.player1 : COLORS.player2;
 
   // Width of individual tile content box (tile margins subtracted)
   const tileInnerWidth = cellWidth > 3 ? cellWidth - 3 : 0;
@@ -33,32 +37,150 @@ export default function AnimatedPiece({ piece, cellWidth, isSelected, onPress }:
   // accounts for 2px gridContainer padding, 1.5px tile margin, and centers piece within tileInnerWidth
   const centeringOffset = 2 + (cellWidth - pieceSize) / 2;
 
-  // Shared values for coordinates
-  const x = useSharedValue(piece.position.col * cellWidth + centeringOffset);
-  const y = useSharedValue(piece.position.row * cellWidth + centeringOffset);
+  // Refs to track previous layout/position for triggering slide animations
+  const prevRow = React.useRef(piece.position.row);
+  const prevCol = React.useRef(piece.position.col);
+  const prevCellWidth = React.useRef(cellWidth);
+  const prevCenteringOffset = React.useRef(centeringOffset);
 
-  // Update animated coordinates when grid position or cell size changes
+  // Target positions (computed dynamically)
+  const targetX = piece.position.col * cellWidth + centeringOffset;
+  const targetY = piece.position.row * cellWidth + centeringOffset;
+
+  // Shared values for coordinates, progress, and revision
+  const progress = useSharedValue(1); // 1 = animation complete / snapped
+  const startX = useSharedValue(targetX);
+  const startY = useSharedValue(targetY);
+  const targetXShared = useSharedValue(targetX);
+  const targetYShared = useSharedValue(targetY);
+  const currentRevision = useSharedValue(boardRevision);
+  const boardRevisionRef = React.useRef(boardRevision);
+
+  // State to track visual position for piece label rendering (prevents immediate label change before slide)
+  const [displayPos, setDisplayPos] = React.useState({ row: piece.position.row, col: piece.position.col });
+
   useEffect(() => {
-    x.value = withTiming(piece.position.col * cellWidth + centeringOffset, {
-      duration: 400,
-      easing: Easing.out(Easing.quad),
-    });
-    y.value = withTiming(piece.position.row * cellWidth + centeringOffset, {
-      duration: 400,
-      easing: Easing.out(Easing.quad),
-    });
-  }, [piece.position.row, piece.position.col, cellWidth, pieceSize, centeringOffset, x, y]);
+    currentRevision.value = boardRevision;
+    boardRevisionRef.current = boardRevision;
+  }, [boardRevision]);
+
+  // Update animated coordinates only when this piece moves or the board layout changes.
+  // Do NOT depend on boardRevision here — it increments on every move (including bot moves)
+  // and re-running this effect for unrelated pieces cancels in-flight animations and can
+  // desync shared values, making stationary pieces snap back to their old visual position.
+  useEffect(() => {
+    const nextTargetX = piece.position.col * cellWidth + centeringOffset;
+    const nextTargetY = piece.position.row * cellWidth + centeringOffset;
+
+    const positionChanged =
+      prevRow.current !== piece.position.row || prevCol.current !== piece.position.col;
+    const layoutChanged =
+      prevCellWidth.current !== cellWidth || prevCenteringOffset.current !== centeringOffset;
+
+    if (!positionChanged && !layoutChanged) {
+      return;
+    }
+
+    const startedRevision = boardRevisionRef.current;
+
+    if (positionChanged) {
+      cancelAnimation(progress);
+
+      // Calculate current position to start from (to avoid sudden jumps)
+      const currentX = startX.value + (targetXShared.value - startX.value) * progress.value;
+      const currentY = startY.value + (targetYShared.value - startY.value) * progress.value;
+
+      startX.value = currentX;
+      startY.value = currentY;
+      targetXShared.value = nextTargetX;
+      targetYShared.value = nextTargetY;
+      progress.value = 0;
+
+      // Drive both coordinates from a single progress animation (called exactly once)
+      progress.value = withTiming(1, {
+        duration: 400,
+        easing: Easing.out(Easing.quad),
+      }, (finished) => {
+        'worklet';
+        if (finished && currentRevision.value === startedRevision) {
+          runOnJS(onAnimationComplete)(piece.id);
+          // Sync visual label only when animation completes
+          runOnJS(setDisplayPos)({ row: piece.position.row, col: piece.position.col });
+        }
+      });
+    } else {
+      // Layout-only change: rescale coordinates without touching animation progress
+      startX.value = nextTargetX;
+      startY.value = nextTargetY;
+      targetXShared.value = nextTargetX;
+      targetYShared.value = nextTargetY;
+      progress.value = 1;
+      setDisplayPos({ row: piece.position.row, col: piece.position.col });
+    }
+
+    prevRow.current = piece.position.row;
+    prevCol.current = piece.position.col;
+    prevCellWidth.current = cellWidth;
+    prevCenteringOffset.current = centeringOffset;
+  }, [piece.position.row, piece.position.col, cellWidth, centeringOffset, onAnimationComplete, piece.id]);
 
   const animatedStyle = useAnimatedStyle(() => {
+    const curX = startX.value + (targetXShared.value - startX.value) * progress.value;
+    const curY = startY.value + (targetYShared.value - startY.value) * progress.value;
     return {
       transform: [
-        { translateX: x.value },
-        { translateY: y.value },
+        { translateX: curX },
+        { translateY: curY },
       ],
-      width: pieceSize,
-      height: pieceSize,
     };
   });
+
+  return (
+    <Animated.View 
+      collapsable={false}
+      style={[styles.animatedContainer, animatedStyle, { width: pieceSize, height: pieceSize }]}
+    >
+      <PieceView
+        type={piece.type}
+        player={piece.player}
+        cellWidth={cellWidth}
+        pieceSize={pieceSize}
+        isSelected={isSelected}
+        onPress={onPress}
+        row={displayPos.row}
+        col={displayPos.col}
+      />
+    </Animated.View>
+  );
+}
+
+interface PieceViewProps {
+  type: PieceType;
+  player: Player;
+  cellWidth: number;
+  pieceSize: number;
+  isSelected: boolean;
+  onPress: () => void;
+  row: number;
+  col: number;
+}
+
+export function PieceView({
+  type,
+  player,
+  cellWidth,
+  pieceSize,
+  isSelected,
+  onPress,
+  row,
+  col,
+}: PieceViewProps) {
+  const isScout = type === PieceType.SCOUT;
+  const isRider = type === PieceType.RIDER;
+  const isJumper = type === PieceType.JUMPER;
+
+  const isPlayer1 = player === 1;
+  const playerColors = isPlayer1 ? COLORS.player1 : COLORS.player2;
 
   // Custom goti shape styling (Scout = Square, Rider = Circle)
   const gotiShapeStyle = isScout
@@ -81,121 +203,57 @@ export default function AnimatedPiece({ piece, cellWidth, isSelected, onPress }:
   const labelColor = isPlayer1 ? '#1F2937' : '#FFFFFF';
 
   // Get the value of the tile that the piece is currently sitting on
-  const tileValue = FIXED_BOARD[piece.position.row][piece.position.col];
+  const tileValue = FIXED_BOARD[row][col];
 
-  // Render Jumper (Octagon) using two overlapping squares rotated relative to each other by 45deg
   if (isJumper) {
     return (
-      <Animated.View style={[styles.animatedContainer, animatedStyle]}>
-        <Pressable 
-          style={styles.pressable} 
-          onPress={onPress}
-          android_ripple={{ color: playerColors.primary + '33', borderless: true }}
-        >
-          <View style={{ width: pieceSize, height: pieceSize, justifyContent: 'center', alignItems: 'center' }}>
-            {/* Base square */}
-            <View 
-              style={[
-                styles.goti,
-                {
-                  position: 'absolute',
-                  width: pieceSize,
-                  height: pieceSize,
-                  borderColor: playerColors.primary,
-                  backgroundColor: playerColors.secondary,
-                  borderRadius: pieceSize * 0.20,
-                },
-                isSelected && {
-                  borderWidth: 3.5,
-                  borderColor: COLORS.selected,
-                }
-              ]}
-            />
-            {/* 45 degree rotated square */}
-            <View 
-              style={[
-                styles.goti,
-                {
-                  position: 'absolute',
-                  width: pieceSize,
-                  height: pieceSize,
-                  borderColor: playerColors.primary,
-                  backgroundColor: playerColors.secondary,
-                  borderRadius: pieceSize * 0.20,
-                  transform: [{ rotate: '45deg' }],
-                },
-                isSelected && {
-                  borderWidth: 3.5,
-                  borderColor: COLORS.selected,
-                }
-              ]}
-            />
-            {/* Center circle cover and label (masking inner intersecting borders) */}
-            <View 
-              style={[
-                styles.innerRing,
-                {
-                  position: 'absolute',
-                  borderRadius: (pieceSize * 0.70) / 2,
-                  borderColor: playerColors.primary + '40',
-                  backgroundColor: playerColors.secondary,
-                  width: pieceSize * 0.70,
-                  height: pieceSize * 0.70,
-                  zIndex: 10,
-                }
-              ]}
-            >
-              {/* Display the value of the occupied tile */}
-              <Text 
-                style={[
-                  styles.label, 
-                  { 
-                    color: labelColor,
-                    fontSize: cellWidth * 0.32,
-                  }
-                ]}
-              >
-                {tileValue}
-              </Text>
-            </View>
-          </View>
-        </Pressable>
-      </Animated.View>
-    );
-  }
-
-  return (
-    <Animated.View style={[styles.animatedContainer, animatedStyle]}>
       <Pressable 
         style={styles.pressable} 
         onPress={onPress}
         android_ripple={{ color: playerColors.primary + '33', borderless: true }}
       >
-        <View 
-          style={[
-            styles.goti,
-            gotiShapeStyle,
-            {
-              borderColor: playerColors.primary,
-              backgroundColor: playerColors.secondary,
-              width: pieceSize,
-              height: pieceSize,
-            },
-            isSelected && {
-              borderWidth: 3.5,
-              borderColor: COLORS.selected,
-            }
-          ]}
-        >
-          {/* Inner ring for premium classic look */}
+        <View style={{ width: pieceSize, height: pieceSize, justifyContent: 'center', alignItems: 'center' }}>
+          {/* Base square */}
+          <View 
+            style={[
+              styles.goti,
+              {
+                position: 'absolute',
+                width: pieceSize,
+                height: pieceSize,
+                borderColor: isSelected ? COLORS.selected : playerColors.primary,
+                backgroundColor: playerColors.secondary,
+                borderRadius: pieceSize * 0.20,
+              }
+            ]}
+          />
+          {/* 45 degree rotated square */}
+          <View 
+            style={[
+              styles.goti,
+              {
+                position: 'absolute',
+                width: pieceSize,
+                height: pieceSize,
+                borderColor: isSelected ? COLORS.selected : playerColors.primary,
+                backgroundColor: playerColors.secondary,
+                borderRadius: pieceSize * 0.20,
+                transform: [{ rotate: '45deg' }],
+              }
+            ]}
+          />
+          {/* Center circle cover and label (masking inner intersecting borders) */}
           <View 
             style={[
               styles.innerRing,
-              innerRingStyle,
               {
+                position: 'absolute',
+                borderRadius: (pieceSize * 0.70) / 2,
                 borderColor: playerColors.primary + '40',
+                backgroundColor: playerColors.secondary,
                 width: pieceSize * 0.70,
                 height: pieceSize * 0.70,
+                zIndex: 10,
               }
             ]}
           >
@@ -214,7 +272,54 @@ export default function AnimatedPiece({ piece, cellWidth, isSelected, onPress }:
           </View>
         </View>
       </Pressable>
-    </Animated.View>
+    );
+  }
+
+  return (
+    <Pressable 
+      style={styles.pressable} 
+      onPress={onPress}
+      android_ripple={{ color: playerColors.primary + '33', borderless: true }}
+    >
+      <View 
+        style={[
+          styles.goti,
+          gotiShapeStyle,
+          {
+            borderColor: isSelected ? COLORS.selected : playerColors.primary,
+            backgroundColor: playerColors.secondary,
+            width: pieceSize,
+            height: pieceSize,
+          }
+        ]}
+      >
+        {/* Inner ring for premium classic look */}
+        <View 
+          style={[
+            styles.innerRing,
+            innerRingStyle,
+            {
+              borderColor: playerColors.primary + '40',
+              width: pieceSize * 0.70,
+              height: pieceSize * 0.70,
+            }
+          ]}
+        >
+          {/* Display the value of the occupied tile */}
+          <Text 
+            style={[
+              styles.label, 
+              { 
+                color: labelColor,
+                fontSize: cellWidth * 0.32,
+              }
+            ]}
+          >
+            {tileValue}
+          </Text>
+        </View>
+      </View>
+    </Pressable>
   );
 }
 
@@ -224,6 +329,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     zIndex: 50,
+    elevation: 50,
   },
   pressable: {
     width: '100%',
@@ -232,7 +338,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   goti: {
-    borderWidth: 2.5,
+    borderWidth: 3,
     justifyContent: 'center',
     alignItems: 'center',
   },

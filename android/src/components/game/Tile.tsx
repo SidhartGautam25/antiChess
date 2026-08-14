@@ -48,7 +48,8 @@ export default function Tile({
 
   const { bgColor, glowColor, labelColor } = getTileStyles();
 
-  // Dynamically calculate borders and text color
+  // Dynamically calculate background, borders and text color
+  let finalBgColor = bgColor;
   let finalBorderColor = glowColor;
   let finalBorderWidth = 1.5;
   let finalLabelColor = labelColor;
@@ -58,10 +59,17 @@ export default function Tile({
       finalBorderColor = COLORS.captureMove;
       finalBorderWidth = 2.5;
       finalLabelColor = COLORS.textPrimary; // White label for red captures
+      // Directly assign blended hex backgrounds to prevent overlay rendering issues
+      if (value === 1) finalBgColor = '#F7C0B6';
+      else if (value === 2) finalBgColor = '#EBAD9B';
+      else finalBgColor = '#B97564';
     } else {
       finalBorderColor = COLORS.legalMove;
       finalBorderWidth = 2.2;
-      // For legal moves, keep labelColor as is since the background is still light
+      // Directly assign blended hex backgrounds to prevent overlay rendering issues
+      if (value === 1) finalBgColor = '#F7E0AA';
+      else if (value === 2) finalBgColor = '#EACC8F';
+      else finalBgColor = '#B79357';
     }
   }
 
@@ -78,7 +86,7 @@ export default function Tile({
       style={[
         styles.tile,
         {
-          backgroundColor: bgColor, // Keep the solid wood tone as base
+          backgroundColor: finalBgColor,
           borderColor: finalBorderColor,
           borderWidth: finalBorderWidth,
         },
@@ -87,21 +95,7 @@ export default function Tile({
       onPress={onPress}
       activeOpacity={0.8}
     >
-      {/* Background tint overlay (blended above base color, behind text) */}
-      {isLegalTarget && (
-        <View 
-          style={[
-            styles.overlayTint,
-            {
-              backgroundColor: isEnemyOccupied 
-                ? 'rgba(255, 69, 58, 0.28)' // Crimson red overlay
-                : 'rgba(255, 179, 0, 0.26)'  // Warm bright amber gold overlay (highly visible)
-            }
-          ]}
-        />
-      )}
-
-      {/* Cell value number (rendered on top of the overlay) */}
+      {/* Cell value number */}
       <Text style={[styles.valueLabel, { color: finalLabelColor }]}>{value}</Text>
 
       {/* Capture lock-on target reticle */}
@@ -109,11 +103,9 @@ export default function Tile({
         <View style={styles.captureTargetRing} />
       )}
 
-      {/* Subtle corner indicator dot for normal legal moves */}
+      {/* Flat corner indicator dot for normal legal moves */}
       {isLegalTarget && !isEnemyOccupied && (
-        <View style={styles.cornerIndicatorContainer}>
-          <View style={styles.cornerIndicator} />
-        </View>
+        <View style={styles.cornerIndicator} />
       )}
     </TouchableOpacity>
   );
@@ -136,14 +128,10 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 8,
   },
-  overlayTint: {
-    ...StyleSheet.absoluteFill,
-    zIndex: 1,
-  },
   valueLabel: {
     fontSize: 22,
     fontWeight: '900',
-    zIndex: 5, // Render above the overlay tint
+    zIndex: 5,
   },
   captureTargetRing: {
     position: 'absolute',
@@ -157,20 +145,15 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     zIndex: 6,
   },
-  cornerIndicatorContainer: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    zIndex: 10,
-  },
   cornerIndicator: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: COLORS.legalMove,
-    shadowColor: COLORS.legalMove,
-    shadowOpacity: 0.6,
-    shadowRadius: 1,
-    elevation: 1,
+    zIndex: 10,
   },
 });
+
