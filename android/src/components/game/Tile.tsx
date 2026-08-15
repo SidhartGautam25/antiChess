@@ -9,18 +9,22 @@ interface TileProps {
   isSelected: boolean;
   isLegalTarget: boolean;
   isEnemyOccupied: boolean;
-  onPress: () => void;
+  onTileClick: (row: number, col: number) => void;
 }
 
-export default function Tile({
+function Tile({
   row,
   col,
   value,
   isSelected,
   isLegalTarget,
   isEnemyOccupied,
-  onPress,
+  onTileClick,
 }: TileProps) {
+  const handlePress = React.useCallback(() => {
+    onTileClick(row, col);
+  }, [onTileClick, row, col]);
+
   // Determine backgrounds and borders based on tile movement value
   const getTileStyles = () => {
     switch (value) {
@@ -92,7 +96,7 @@ export default function Tile({
         },
         isSelected && styles.selectedTileShadow,
       ]}
-      onPress={onPress}
+      onPress={handlePress}
       activeOpacity={0.8}
     >
       {/* Cell value number */}
@@ -110,6 +114,8 @@ export default function Tile({
     </TouchableOpacity>
   );
 }
+
+export default React.memo(Tile);
 
 const styles = StyleSheet.create({
   tile: {

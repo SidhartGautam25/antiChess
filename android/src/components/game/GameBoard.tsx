@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { StyleSheet, View, LayoutChangeEvent } from 'react-native';
 import { FIXED_BOARD, BOARD_SIZE } from '../../constants/board';
 import { COLORS } from '../../constants/colors';
@@ -27,42 +27,44 @@ export default function GameBoard({
   animatingPieceId,
   onAnimationComplete,
 }: GameBoardProps) {
-  const [parentDimensions, setParentDimensions] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
+  const [parentDimensions, setParentDimensions] = useState({ width: 0, height: 0 });
 
-  const handleLayout = (event: LayoutChangeEvent) => {
+  const handleLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
     if (width > 0 && height > 0) {
-      setParentDimensions((prev) => {
-        if (Math.abs(prev.width - width) < 1 && Math.abs(prev.height - height) < 1) {
-          return prev;
-        }
-        return { width, height };
-      });
+      setParentDimensions((prev) =>
+        Math.abs(prev.width - width) < 1 && Math.abs(prev.height - height) < 1
+          ? prev
+          : { width, height }
+      );
     }
-  };
+  }, []);
 
   const boardSize = Math.min(parentDimensions.width, parentDimensions.height);
-  
-  // Calculate cellWidth based on the grid area (subtracting 4px borders and 4px paddings = 8px total)
   const cellWidth = boardSize > 0 ? (boardSize - 8) / BOARD_SIZE : 0;
 
-  // Helper to check if a tile is a legal move target
-  const checkIsLegal = (row: number, col: number) => {
-    return legalMoves.some((m) => m.row === row && m.col === col);
-  };
+  // O(1) piece lookup instead of Array.find inside a double loop.
+  const pieceMap = useMemo(() => {
+    const map = new Map<string, Piece>();
+    for (const p of pieces) map.set(`${p.position.row},${p.position.col}`, p);
+    return map;
+  }, [pieces]);
 
-  // Generate grid rows and columns
-  const renderTiles = () => {
+  const legalMoveSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const m of legalMoves) set.add(`${m.row},${m.col}`);
+    return set;
+  }, [legalMoves]);
+
+  const tileGrid = useMemo(() => {
     const grid = [];
     for (let r = 0; r < BOARD_SIZE; r++) {
       const rowTiles = [];
       for (let c = 0; c < BOARD_SIZE; c++) {
         const value = FIXED_BOARD[r][c];
-        
-        // Find if there is a piece at this coordinate
-        const pieceAtTile = pieces.find((p) => p.position.row === r && p.position.col === c);
+        const pieceAtTile = pieceMap.get(`${r},${c}`);
         const isSelected = selectedPieceId !== null && pieceAtTile?.id === selectedPieceId;
-        const isLegal = checkIsLegal(r, c);
+        const isLegal = legalMoveSet.has(`${r},${c}`);
         const isEnemy = pieceAtTile ? pieceAtTile.player !== activePlayer : false;
 
         rowTiles.push(
@@ -74,7 +76,7 @@ export default function GameBoard({
             isSelected={isSelected}
             isLegalTarget={isLegal}
             isEnemyOccupied={isEnemy}
-            onPress={() => onTileClick(r, c)}
+            onTileClick={onTileClick}
           />
         );
       }
@@ -85,41 +87,25 @@ export default function GameBoard({
       );
     }
     return grid;
-  };
+  }, [pieceMap, legalMoveSet, selectedPieceId, activePlayer, onTileClick]);
 
   return (
     <View style={styles.wrapper} onLayout={handleLayout}>
       {boardSize > 100 && (
-        <View 
-          style={[
-            styles.boardContainer,
-            {
-              width: boardSize,
-              height: boardSize,
-            }
-          ]}
-        >
-          {/* Render the background board tiles grid */}
-          <View style={styles.gridContainer}>
-            {renderTiles()}
-          </View>
+        <View style={[styles.boardContainer, { width: boardSize, height: boardSize }]}>
+          <View style={styles.gridContainer}>{tileGrid}</View>
 
-          {/* Overlay the animated pieces relative to the boardContainer */}
-          {pieces.map((piece) => {
-            const isSelected = selectedPieceId === piece.id;
-            
-            return (
-              <AnimatedPiece
-                key={piece.id}
-                piece={piece}
-                cellWidth={cellWidth}
-                isSelected={isSelected}
-                onPress={() => onTileClick(piece.position.row, piece.position.col)}
-                animatingPieceId={animatingPieceId}
-                onAnimationComplete={onAnimationComplete}
-              />
-            );
-          })}
+          {pieces.map((piece) => (
+            <AnimatedPiece
+              key={piece.id}
+              piece={piece}
+              cellWidth={cellWidth}
+              isSelected={selectedPieceId === piece.id}
+              onTileClick={onTileClick}
+              animatingPieceId={animatingPieceId}
+              onAnimationComplete={onAnimationComplete}
+            />
+          ))}
         </View>
       )}
     </View>
@@ -156,4 +142,3 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
 });
-
