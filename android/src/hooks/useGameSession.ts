@@ -466,7 +466,7 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
             dispatch({ type: 'BOT_MOVE_FAILED' });
           }
         });
-    }, 300); // 300ms reaction delay for bot thinking
+    }, 800); // 800ms reaction delay for bot thinking
 
     return () => {
       isActive = false;

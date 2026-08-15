@@ -78,29 +78,41 @@ function playWebSound(type: 'move' | 'capture') {
   }
 }
 
-// Keep a map of players so we don't recreate them every time (saves resource loading time and memory)
+// Keep a map of players pre-created for native platforms (loaded instantly from local bundle)
 let movePlayer: any = null;
 let capturePlayer: any = null;
 
-// Function to play sound using expo-audio on native platforms (New Architecture compatible)
-async function playNativeSound(type: 'move' | 'capture') {
+// Initialize players immediately if on native platform to pre-buffer them
+if (Platform.OS !== 'web') {
   try {
     const { createAudioPlayer } = require('expo-audio');
-    const moveUrl = 'https://lichess.org/assets/sound/standard/Move.mp3';
-    const captureUrl = 'https://lichess.org/assets/sound/standard/Capture.mp3';
+    const moveSource = require('../../assets/sounds/move.mp3');
+    const captureSource = require('../../assets/sounds/capture.mp3');
     
-    if (type === 'move') {
-      if (!movePlayer) {
-        movePlayer = createAudioPlayer({ uri: moveUrl });
-      }
-      movePlayer.seekTo(0);
-      movePlayer.play();
+    movePlayer = createAudioPlayer(moveSource);
+    capturePlayer = createAudioPlayer(captureSource);
+  } catch (e) {
+    console.warn('Failed to pre-initialize native audio players:', e);
+  }
+}
+
+function playNativeSound(type: 'move' | 'capture') {
+  try {
+    const player = type === 'move' ? movePlayer : capturePlayer;
+    if (player) {
+      player.seekTo(0);
+      player.play();
     } else {
-      if (!capturePlayer) {
-        capturePlayer = createAudioPlayer({ uri: captureUrl });
-      }
-      capturePlayer.seekTo(0);
-      capturePlayer.play();
+      // Fallback lazy initialization if not already initialized
+      const { createAudioPlayer } = require('expo-audio');
+      const moveSource = require('../../assets/sounds/move.mp3');
+      const captureSource = require('../../assets/sounds/capture.mp3');
+      
+      const newPlayer = createAudioPlayer(type === 'move' ? moveSource : captureSource);
+      if (type === 'move') movePlayer = newPlayer;
+      else capturePlayer = newPlayer;
+      
+      newPlayer.play();
     }
   } catch (e) {
     console.warn('Native Audio playback failed:', e);

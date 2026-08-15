@@ -42,7 +42,7 @@ export default function GameBoard({
   };
 
   const boardSize = Math.min(parentDimensions.width, parentDimensions.height);
-  
+
   // Calculate cellWidth based on the grid area (subtracting 4px borders and 4px paddings = 8px total)
   const cellWidth = boardSize > 0 ? (boardSize - 8) / BOARD_SIZE : 0;
 
@@ -58,7 +58,7 @@ export default function GameBoard({
       const rowTiles = [];
       for (let c = 0; c < BOARD_SIZE; c++) {
         const value = FIXED_BOARD[r][c];
-        
+
         // Find if there is a piece at this coordinate
         const pieceAtTile = pieces.find((p) => p.position.row === r && p.position.col === c);
         const isSelected = selectedPieceId !== null && pieceAtTile?.id === selectedPieceId;
@@ -90,7 +90,7 @@ export default function GameBoard({
   return (
     <View style={styles.wrapper} onLayout={handleLayout}>
       {boardSize > 100 && (
-        <View 
+        <View
           style={[
             styles.boardContainer,
             {
@@ -107,7 +107,7 @@ export default function GameBoard({
           {/* Overlay the animated pieces relative to the boardContainer */}
           {pieces.map((piece) => {
             const isSelected = selectedPieceId === piece.id;
-            
+
             return (
               <AnimatedPiece
                 key={piece.id}
