@@ -9,7 +9,7 @@ interface AnimatedPieceProps {
   piece: Piece;
   cellWidth: number;
   isSelected: boolean;
-  onPress: () => void;
+  onTileClick: (row: number, col: number) => void;
   animatingPieceId: string | null;
   onAnimationComplete: (pieceId: string) => void;
 }
@@ -31,14 +31,17 @@ function getMoveDuration(fromRow: number, fromCol: number, toRow: number, toCol:
   return Math.min(1000, 600 + cellDistance * 80);
 }
 
-export default function AnimatedPiece({
+function AnimatedPiece({
   piece,
   cellWidth,
   isSelected,
-  onPress,
+  onTileClick,
   animatingPieceId,
   onAnimationComplete,
 }: AnimatedPieceProps) {
+  const handlePress = React.useCallback(() => {
+    onTileClick(piece.position.row, piece.position.col);
+  }, [onTileClick, piece.position.row, piece.position.col]);
   const isJumper = piece.type === PieceType.JUMPER;
   const tileInnerWidth = cellWidth > 3 ? cellWidth - 3 : 0;
   let pieceSize = tileInnerWidth * 0.80;
@@ -163,7 +166,7 @@ export default function AnimatedPiece({
         cellWidth={cellWidth}
         pieceSize={pieceSize}
         isSelected={isSelected}
-        onPress={onPress}
+        onPress={handlePress}
         row={displayPos.row}
         col={displayPos.col}
       />
@@ -364,3 +367,23 @@ const styles = StyleSheet.create({
     }),
   },
 });
+
+// Custom comparator: only re-render a piece if ITS OWN data changed, or if
+// the animatingPieceId transition actually concerns this specific piece
+// (it just started or just stopped animating). Otherwise ignore
+// animatingPieceId changes entirely — a piece that has nothing to do with
+// the current move shouldn't re-render just because SOME piece moved.
+function arePiecePropsEqual(prev: AnimatedPieceProps, next: AnimatedPieceProps): boolean {
+  if (prev.piece !== next.piece) return false; // reducer keeps stable refs for untouched pieces
+  if (prev.cellWidth !== next.cellWidth) return false;
+  if (prev.isSelected !== next.isSelected) return false;
+  if (prev.onTileClick !== next.onTileClick) return false;
+  if (prev.onAnimationComplete !== next.onAnimationComplete) return false;
+
+  const pieceId = next.piece.id;
+  const wasRelevant = prev.animatingPieceId === pieceId;
+  const isRelevant = next.animatingPieceId === pieceId;
+  return wasRelevant === isRelevant;
+}
+
+export default React.memo(AnimatedPiece, arePiecePropsEqual);

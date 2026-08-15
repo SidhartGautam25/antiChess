@@ -1,22 +1,23 @@
 import { Piece, PieceType, Player, Position, Move, LevelConfig } from '../types/game';
 import { FIXED_BOARD } from '../constants/board';
 import { LEVEL_REGISTRY } from '../constants/levels';
-import { getLegalMoves, simulateMove, checkWinCondition } from './gameEngine';
+import {
+  getLegalMoves,
+  checkWinCondition,
+  applyMoveInPlace,
+  undoMoveInPlace,
+  cloneForSearch,
+  buildBoardMap,
+} from './gameEngine';
 
-/**
- * Evaluates the board score from Player 2's perspective (maximizing player).
- * Positive values favor Player 2 (AI), negative values favor Player 1 (Human).
- */
 export function evaluateBoard(pieces: Piece[], config: LevelConfig): number {
   const p1Pieces = pieces.filter((p) => p.player === 1);
   const p2Pieces = pieces.filter((p) => p.player === 2);
-  
-  // Terminal win checks
+
   if (p2Pieces.length === 0) return -1000000;
   if (p1Pieces.length === 0) return 1000000;
-  
+
   let score = 0;
-  
   const RIDER_VAL = 300;
   const JUMPER_VAL = 200;
   const SCOUT_VAL = 100;
@@ -26,162 +27,120 @@ export function evaluateBoard(pieces: Piece[], config: LevelConfig): number {
     if (type === PieceType.JUMPER) return JUMPER_VAL;
     return SCOUT_VAL;
   };
-  
-  // 1. Material & Positional Evaluation for Player 2 (AI)
+
   for (const piece of p2Pieces) {
-    const val = getPieceValue(piece.type);
-    score += val;
-    
-    // Position weight based on current tile value N
-    const tileVal = FIXED_BOARD[piece.position.row][piece.position.col];
-    score += tileVal * config.positionWeight;
-    
-    // Centrality: reward pieces for occupying center 2x2 quadrant (rows/cols 3 and 4)
+    score += getPieceValue(piece.type);
+    score += FIXED_BOARD[piece.position.row][piece.position.col] * config.positionWeight;
     const rowDist = Math.min(Math.abs(piece.position.row - 3), Math.abs(piece.position.row - 4));
     const colDist = Math.min(Math.abs(piece.position.col - 3), Math.abs(piece.position.col - 4));
-    const distToCenter = rowDist + colDist;
-    score += (6 - distToCenter) * 4; // Max bonus = 24 (at center), min bonus = 0
+    score += (6 - (rowDist + colDist)) * 4;
   }
-  
-  // 2. Material & Positional Evaluation for Player 1 (Human)
+
   for (const piece of p1Pieces) {
-    const val = getPieceValue(piece.type);
-    score -= val;
-    
-    const tileVal = FIXED_BOARD[piece.position.row][piece.position.col];
-    score -= tileVal * config.positionWeight;
-    
+    score -= getPieceValue(piece.type);
+    score -= FIXED_BOARD[piece.position.row][piece.position.col] * config.positionWeight;
     const rowDist = Math.min(Math.abs(piece.position.row - 3), Math.abs(piece.position.row - 4));
     const colDist = Math.min(Math.abs(piece.position.col - 3), Math.abs(piece.position.col - 4));
-    const distToCenter = rowDist + colDist;
-    score -= (6 - distToCenter) * 4;
+    score -= (6 - (rowDist + colDist)) * 4;
   }
-  
+
   return score;
 }
 
+// Module-scoped yield clock — reset at the start of every top-level search.
+let lastYieldAt = 0;
+const FRAME_BUDGET_MS = 8; // stay well under one 16ms frame
+
+async function maybeYield(): Promise<void> {
+  const now = Date.now();
+  if (now - lastYieldAt > FRAME_BUDGET_MS) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    lastYieldAt = Date.now();
+  }
+}
+
 /**
- * Minimax algorithm with Alpha-Beta pruning.
- * Returns the best score and the corresponding move.
+ * Minimax with alpha-beta pruning, using make/unmake (in-place mutation)
+ * instead of allocating a new board per node. Periodically yields to the
+ * event loop so the JS thread stays responsive, and respects a hard
+ * deadline so a single search call can never run away.
  */
-export function minimax(
+export async function minimaxAsync(
   pieces: Piece[],
+  boardMap: (Piece | null)[][],
   depth: number,
   alpha: number,
   beta: number,
   isMaximizing: boolean,
-  config: LevelConfig
-): { score: number; move: Move | null } {
-  // Check terminal state
+  config: LevelConfig,
+  deadline: number
+): Promise<{ score: number; move: Move | null }> {
+  await maybeYield();
+
   const winner = checkWinCondition(pieces);
-  if (winner === 2) {
-    // Player 2 (AI) wins, encourage faster victory path
-    return { score: 1000000 + depth, move: null };
-  }
-  if (winner === 1) {
-    // Player 1 wins, delay defeat path
-    return { score: -1000000 - depth, move: null };
-  }
-  
-  if (depth === 0) {
+  if (winner === 2) return { score: 1000000 + depth, move: null };
+  if (winner === 1) return { score: -1000000 - depth, move: null };
+
+  if (depth === 0 || Date.now() > deadline) {
     return { score: evaluateBoard(pieces, config), move: null };
-  }
-  
-  // Construct boardMap for O(1) piece lookup
-  const boardMap: (Piece | null)[][] = Array(8).fill(null).map(() => Array(8).fill(null));
-  for (const p of pieces) {
-    boardMap[p.position.row][p.position.col] = p;
   }
 
   const activePlayer: Player = isMaximizing ? 2 : 1;
   const playerPieces = pieces.filter((p) => p.player === activePlayer);
-  
-  // Generate all legal moves for active player
+
   const moves: Move[] = [];
   for (const piece of playerPieces) {
     const legalTargets = getLegalMoves(piece, pieces, boardMap);
     for (const target of legalTargets) {
-      moves.push({
-        pieceId: piece.id,
-        from: piece.position,
-        to: target,
-      });
+      moves.push({ pieceId: piece.id, from: piece.position, to: target });
     }
   }
-  
+
   if (moves.length === 0) {
-    // No legal moves (draw/stalemate position)
     return { score: evaluateBoard(pieces, config), move: null };
   }
-  
-  // Move sorting (captures first) to optimize alpha-beta pruning speed
+
   moves.sort((a, b) => {
-    const aIsCapture = boardMap[a.to.row][a.to.col] !== null;
-    const bIsCapture = boardMap[b.to.row][b.to.col] !== null;
-    
-    if (aIsCapture && !bIsCapture) return -1;
-    if (!aIsCapture && bIsCapture) return 1;
+    const aCap = boardMap[a.to.row][a.to.col] !== null;
+    const bCap = boardMap[b.to.row][b.to.col] !== null;
+    if (aCap && !bCap) return -1;
+    if (!aCap && bCap) return 1;
     return 0;
   });
-  
-  let bestMove: Move | null = moves[0] || null; // Initialize to first move to prevent null return if all evaluations equal
-  
+
+  let bestMove: Move | null = moves[0] || null;
+
   if (isMaximizing) {
     let maxEval = -Infinity;
     for (const move of moves) {
-      const pieceToMove = boardMap[move.from.row][move.from.col]!;
-      const nextPiecesState = simulateMove(pieces, pieceToMove, move.to);
-      
-      const { score: evaluation } = minimax(
-        nextPiecesState,
-        depth - 1,
-        alpha,
-        beta,
-        false,
-        config
+      const undo = applyMoveInPlace(pieces, boardMap, move);
+      const { score: evaluation } = await minimaxAsync(
+        pieces, boardMap, depth - 1, alpha, beta, false, config, deadline
       );
-      
-      if (evaluation > maxEval) {
-        maxEval = evaluation;
-        bestMove = move;
-      }
+      undoMoveInPlace(pieces, boardMap, move, undo);
+
+      if (evaluation > maxEval) { maxEval = evaluation; bestMove = move; }
       alpha = Math.max(alpha, evaluation);
-      if (beta <= alpha) {
-        break; // Beta cutoff
-      }
+      if (beta <= alpha || Date.now() > deadline) break;
     }
     return { score: maxEval, move: bestMove };
   } else {
     let minEval = Infinity;
     for (const move of moves) {
-      const pieceToMove = boardMap[move.from.row][move.from.col]!;
-      const nextPiecesState = simulateMove(pieces, pieceToMove, move.to);
-      
-      const { score: evaluation } = minimax(
-        nextPiecesState,
-        depth - 1,
-        alpha,
-        beta,
-        true,
-        config
+      const undo = applyMoveInPlace(pieces, boardMap, move);
+      const { score: evaluation } = await minimaxAsync(
+        pieces, boardMap, depth - 1, alpha, beta, true, config, deadline
       );
-      
-      if (evaluation < minEval) {
-        minEval = evaluation;
-        bestMove = move;
-      }
+      undoMoveInPlace(pieces, boardMap, move, undo);
+
+      if (evaluation < minEval) { minEval = evaluation; bestMove = move; }
       beta = Math.min(beta, evaluation);
-      if (beta <= alpha) {
-        break; // Alpha cutoff
-      }
+      if (beta <= alpha || Date.now() > deadline) break;
     }
     return { score: minEval, move: bestMove };
   }
 }
 
-/**
- * A simple seedable LCG (Linear Congruential Generator) PRNG.
- */
 export function seedRandom(seed: number): () => number {
   let currentSeed = seed;
   return () => {
@@ -190,67 +149,58 @@ export function seedRandom(seed: number): () => number {
   };
 }
 
-/**
- * Returns the bot's chosen move based on active pieces and the selected AI difficulty level.
- * Uses a seedable random generator for deterministic bot blunders.
- */
-export function getBotMoveForLevel(
-  levelNumber: number,
-  pieces: Piece[],
-  seed: number
-): { move: Move | null; nextSeed: number } {
-  const config = LEVEL_REGISTRY[levelNumber] || LEVEL_REGISTRY[1];
-  const rng = seedRandom(seed);
-  
-  // Find all legal moves for Player 2 (AI)
-  const botPieces = pieces.filter((p) => p.player === 2);
-  const allMoves: Move[] = [];
-  for (const piece of botPieces) {
-    const targets = getLegalMoves(piece, pieces);
-    for (const target of targets) {
-      allMoves.push({
-        pieceId: piece.id,
-        from: piece.position,
-        to: target,
-      });
-    }
-  }
-  
-  if (allMoves.length === 0) {
-    return { move: null, nextSeed: Math.floor(rng() * 1000000) };
-  }
-  
-  let chosenMove: Move | null = null;
-  
-  // LEVEL BLUNDER LOGIC:
-  // Randomly blunder a move on lower levels to simulate human-like skill level
-  if (rng() < config.blunderRate) {
-    const randomIndex = Math.floor(rng() * allMoves.length);
-    chosenMove = allMoves[randomIndex];
-  } else {
-    // Run Minimax search to find the optimal move
-    const { move } = minimax(pieces, config.depth, -Infinity, Infinity, true, config);
-    chosenMove = move;
-  }
-  
-  return {
-    move: chosenMove,
-    nextSeed: Math.floor(rng() * 1000000),
-  };
-}
-
-/**
- * Async boundary wrapper for the bot's move calculation.
- * Returns a Promise to avoid blocking the main UI thread immediately.
- */
 export async function getBotMoveForLevelAsync(
   levelNumber: number,
   pieces: Piece[],
   seed: number
 ): Promise<{ move: Move | null; nextSeed: number }> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(getBotMoveForLevel(levelNumber, pieces, seed));
-    }, 0);
-  });
+  const config = LEVEL_REGISTRY[levelNumber] || LEVEL_REGISTRY[1];
+  const rng = seedRandom(seed);
+
+  const botPieces = pieces.filter((p) => p.player === 2);
+  const allMoves: Move[] = [];
+  for (const piece of botPieces) {
+    const targets = getLegalMoves(piece, pieces);
+    for (const target of targets) {
+      allMoves.push({ pieceId: piece.id, from: piece.position, to: target });
+    }
+  }
+
+  if (allMoves.length === 0) {
+    return { move: null, nextSeed: Math.floor(rng() * 1000000) };
+  }
+
+  let chosenMove: Move | null = null;
+
+  if (rng() < config.blunderRate) {
+    chosenMove = allMoves[Math.floor(rng() * allMoves.length)];
+  } else {
+    // Private working copy — the search is free to mutate this without
+    // ever touching the real game state.
+    const workingPieces = cloneForSearch(pieces);
+    const boardMap = buildBoardMap(workingPieces);
+
+    lastYieldAt = Date.now();
+    const MAX_THINK_MS = 1400; // hard cap — bot never "thinks" longer than this
+    const deadline = Date.now() + MAX_THINK_MS;
+
+    let bestSoFar: Move = allMoves[0];
+
+    // Iterative deepening: search depth 1, 2, 3... capped at config.depth,
+    // bailing out the moment the time budget is spent. Always leaves a
+    // usable move from the deepest FULLY completed pass, even if a deeper
+    // pass gets cut off mid-search.
+    for (let d = 1; d <= config.depth; d++) {
+      if (Date.now() > deadline) break;
+      const { move } = await minimaxAsync(
+        workingPieces, boardMap, d, -Infinity, Infinity, true, config, deadline
+      );
+      if (move) bestSoFar = move;
+      await new Promise<void>((resolve) => setTimeout(resolve, 0)); // yield between depths too
+    }
+
+    chosenMove = bestSoFar;
+  }
+
+  return { move: chosenMove, nextSeed: Math.floor(rng() * 1000000) };
 }

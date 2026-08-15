@@ -1,4 +1,4 @@
-import { Piece, PieceType, Player, Position } from '../types/game';
+import { Piece, PieceType, Player, Position, Move } from '../types/game';
 import { FIXED_BOARD, BOARD_SIZE } from '../constants/board';
 
 // Directions: North, South, East, West, North-East, North-West, South-East, South-West
@@ -187,4 +187,80 @@ export function getLegalMoves(piece: Piece, pieces: Piece[], boardMap?: (Piece |
   }
   
   return legalMoves;
+}
+
+/**
+ * Undo record for an in-place move — lets the AI search "unmake" a move
+ * without allocating a new board/piece array. This is the make/unmake
+ * pattern real chess engines use to keep search fast and GC-light.
+ */
+export interface UndoRecord {
+  prevPosition: Position;
+  capturedPiece: Piece | null;
+}
+
+/**
+ * Mutates `pieces` and `boardMap` in place to apply a move.
+ * Returns an UndoRecord so the move can be precisely reversed.
+ * NEVER call this on the live React-state pieces array — only on a
+ * private working copy created via cloneForSearch().
+ */
+export function applyMoveInPlace(
+  pieces: Piece[],
+  boardMap: (Piece | null)[][],
+  move: Move
+): UndoRecord {
+  const piece = boardMap[move.from.row][move.from.col];
+  if (!piece) {
+    throw new Error(`applyMoveInPlace: no piece at (${move.from.row},${move.from.col})`);
+  }
+
+  const capturedPiece = boardMap[move.to.row][move.to.col];
+  if (capturedPiece) {
+    const idx = pieces.indexOf(capturedPiece);
+    if (idx !== -1) pieces.splice(idx, 1);
+  }
+
+  const prevPosition = piece.position;
+  boardMap[move.from.row][move.from.col] = null;
+  boardMap[move.to.row][move.to.col] = piece;
+  piece.position = move.to;
+
+  return { prevPosition, capturedPiece: capturedPiece ?? null };
+}
+
+/** Reverses applyMoveInPlace exactly. */
+export function undoMoveInPlace(
+  pieces: Piece[],
+  boardMap: (Piece | null)[][],
+  move: Move,
+  undo: UndoRecord
+): void {
+  const piece = boardMap[move.to.row][move.to.col];
+  if (!piece) {
+    throw new Error(`undoMoveInPlace: no piece at (${move.to.row},${move.to.col})`);
+  }
+
+  boardMap[move.to.row][move.to.col] = undo.capturedPiece;
+  boardMap[move.from.row][move.from.col] = piece;
+  piece.position = undo.prevPosition;
+
+  if (undo.capturedPiece) {
+    pieces.push(undo.capturedPiece);
+  }
+}
+
+/**
+ * Deep-clones pieces into a private array the search can freely mutate,
+ * fully decoupled from React state. Call this ONCE per top-level bot
+ * move — not per search node.
+ */
+export function cloneForSearch(pieces: Piece[]): Piece[] {
+  return pieces.map((p) => ({ ...p, position: { ...p.position } }));
+}
+
+export function buildBoardMap(pieces: Piece[]): (Piece | null)[][] {
+  const boardMap: (Piece | null)[][] = Array(8).fill(null).map(() => Array(8).fill(null));
+  for (const p of pieces) boardMap[p.position.row][p.position.col] = p;
+  return boardMap;
 }

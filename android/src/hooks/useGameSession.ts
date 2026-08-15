@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useReducer } from 'react';
+import { useState, useEffect, useRef, useCallback, useReducer, useMemo } from 'react';
 import { Piece, PieceType, Player, Position, GameMode, Move, MoveLogItem } from '../types/game';
 import { INITIAL_PIECES } from '../constants/board';
 import { getLegalMoves, simulateMove, checkWinCondition } from '../engine/gameEngine';
@@ -330,15 +330,31 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
 
   const startTimeRef = useRef<number>(Date.now());
   const botTimeoutRef = useRef<any>(null);
+  const animWatchdogRef = useRef<any>(null);
 
-  // Clear timeout on unmount
+  // Clear timeouts on unmount
   useEffect(() => {
     return () => {
       if (botTimeoutRef.current) {
         clearTimeout(botTimeoutRef.current);
       }
+      if (animWatchdogRef.current) {
+        clearTimeout(animWatchdogRef.current);
+      }
     };
   }, []);
+
+  useEffect(() => {
+    if (!sessionState.animatingPieceId) {
+      if (animWatchdogRef.current) clearTimeout(animWatchdogRef.current);
+      return;
+    }
+    animWatchdogRef.current = setTimeout(() => {
+      console.warn('[Watchdog] animatingPieceId stuck, force-clearing:', sessionState.animatingPieceId);
+      dispatch({ type: 'ANIMATION_COMPLETED', pieceId: sessionState.animatingPieceId!, gameMode });
+    }, 2500);
+    return () => clearTimeout(animWatchdogRef.current);
+  }, [sessionState.animatingPieceId, gameMode]);
 
   // Restart/reset game state
   const restartGame = useCallback(() => {
@@ -368,10 +384,17 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
   // Get active piece
   const selectedPiece = sessionState.pieces.find((p) => p.id === sessionState.selectedPieceId) || null;
 
-  // Calculate legal moves for selected piece (disable when bot thinking or piece animating)
-  const legalMoves = selectedPiece && !sessionState.isBotThinking && !sessionState.winner && !sessionState.animatingPieceId
-    ? getLegalMoves(selectedPiece, sessionState.pieces)
-    : [];
+  const legalMoves = useMemo(() => (
+    selectedPiece && !sessionState.isBotThinking && !sessionState.winner && !sessionState.animatingPieceId
+      ? getLegalMoves(selectedPiece, sessionState.pieces)
+      : []
+  ), [selectedPiece, sessionState.isBotThinking, sessionState.winner, sessionState.animatingPieceId, sessionState.pieces]);
+
+  const legalMovesRef = useRef(legalMoves);
+  useEffect(() => { legalMovesRef.current = legalMoves; }, [legalMoves]);
+
+  const gameModeRef = useRef(gameMode);
+  useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
 
   // Development assertions and logging (hook-safe top-level execution)
   useEffect(() => {
@@ -412,18 +435,17 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
 
   // Core move execution function (just dispatches the move action)
   const executeMove = useCallback((pieceId: string, to: Position) => {
+    const capturedPiece = stateRef.current.pieces.find(
+      (p) => p.position.row === to.row && p.position.col === to.col
+    );
+    playSound(capturedPiece ? 'capture' : 'move');
     dispatch({ type: 'PLAYER_MOVE_COMMITTED', pieceId, to });
   }, []);
 
   // Handle animation completion callback
   const handleAnimationComplete = useCallback((pieceId: string) => {
-    // Play chess move sound or capture sound
-    const lastMove = sessionState.moveLog[sessionState.moveLog.length - 1];
-    const isCapture = lastMove && lastMove.pieceId === pieceId && lastMove.capturedPieceId !== undefined;
-    playSound(isCapture ? 'capture' : 'move');
-
-    dispatch({ type: 'ANIMATION_COMPLETED', pieceId, gameMode });
-  }, [gameMode, sessionState.moveLog]);
+    dispatch({ type: 'ANIMATION_COMPLETED', pieceId, gameMode: gameModeRef.current });
+  }, []);
 
   // Effect to calculate bot move after player's animation has completed
   useEffect(() => {
@@ -447,6 +469,10 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
           if (botMove) {
             const botPiece = stateRef.current.pieces.find((p) => p.id === botMove.pieceId);
             if (botPiece) {
+              const capturedPiece = stateRef.current.pieces.find(
+                (p) => p.position.row === botMove.to.row && p.position.col === botMove.to.col
+              );
+              playSound(capturedPiece ? 'capture' : 'move');
               dispatch({
                 type: 'BOT_MOVE_COMMITTED',
                 pieceId: botMove.pieceId,
@@ -493,33 +519,20 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
 
   // Handle board tile clicking
   const handleTileClick = useCallback((row: number, col: number) => {
-    const pieces = sessionState.pieces;
-    const activePlayer = sessionState.activePlayer;
-    const winner = sessionState.winner;
-    const isBotThinking = sessionState.isBotThinking;
-    const selectedPieceId = sessionState.selectedPieceId;
-    const animatingPieceId = sessionState.animatingPieceId;
+    const state = stateRef.current;
+    if (state.winner || state.isBotThinking || state.animatingPieceId) return;
 
-    if (winner || isBotThinking || animatingPieceId) return;
+    const isLegalTarget = legalMovesRef.current.some((m) => m.row === row && m.col === col);
 
-    // Check if clicked tile is a legal move for selected piece
-    const isLegalTarget = legalMoves.some((m) => m.row === row && m.col === col);
-
-    if (selectedPieceId && isLegalTarget) {
-      executeMove(selectedPieceId, { row, col });
+    if (state.selectedPieceId && isLegalTarget) {
+      executeMove(state.selectedPieceId, { row, col });
     } else {
-      // Otherwise, see if there is a piece of the active player on the clicked tile
-      const clickedPiece = pieces.find(
-        (p) => p.position.row === row && p.position.col === col && p.player === activePlayer
+      const clickedPiece = state.pieces.find(
+        (p) => p.position.row === row && p.position.col === col && p.player === state.activePlayer
       );
-
-      if (clickedPiece) {
-        dispatch({ type: 'SET_SELECTED_PIECE', pieceId: clickedPiece.id });
-      } else {
-        dispatch({ type: 'SET_SELECTED_PIECE', pieceId: null });
-      }
+      dispatch({ type: 'SET_SELECTED_PIECE', pieceId: clickedPiece ? clickedPiece.id : null });
     }
-  }, [sessionState.selectedPieceId, legalMoves, executeMove, sessionState.pieces, sessionState.activePlayer, sessionState.winner, sessionState.isBotThinking, sessionState.animatingPieceId]);
+  }, [executeMove]);
 
   // Undo functionality
   const undoMove = useCallback(() => {
