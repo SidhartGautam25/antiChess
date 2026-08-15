@@ -54,13 +54,21 @@ export default function GameBoard({
   // Generate grid rows and columns
   const renderTiles = () => {
     const grid = [];
+    // Create a quick coordinate-to-piece map for O(1) loop lookups
+    const piecesMap = new Map<string, Piece>();
+    for (const p of pieces) {
+      piecesMap.set(`${p.position.row}-${p.position.col}`, p);
+    }
+
+    const inputDisabled = isBotThinking || animatingPieceId !== null;
+
     for (let r = 0; r < BOARD_SIZE; r++) {
       const rowTiles = [];
       for (let c = 0; c < BOARD_SIZE; c++) {
         const value = FIXED_BOARD[r][c];
 
-        // Find if there is a piece at this coordinate
-        const pieceAtTile = pieces.find((p) => p.position.row === r && p.position.col === c);
+        // O(1) piece lookup
+        const pieceAtTile = piecesMap.get(`${r}-${c}`);
         const isSelected = selectedPieceId !== null && pieceAtTile?.id === selectedPieceId;
         const isLegal = checkIsLegal(r, c);
         const isEnemy = pieceAtTile ? pieceAtTile.player !== activePlayer : false;
@@ -74,7 +82,7 @@ export default function GameBoard({
             isSelected={isSelected}
             isLegalTarget={isLegal}
             isEnemyOccupied={isEnemy}
-            onPress={() => onTileClick(r, c)}
+            onPress={inputDisabled ? () => {} : () => onTileClick(r, c)}
           />
         );
       }
@@ -86,6 +94,8 @@ export default function GameBoard({
     }
     return grid;
   };
+
+  const inputDisabled = isBotThinking || animatingPieceId !== null;
 
   return (
     <View style={styles.wrapper} onLayout={handleLayout}>
@@ -103,7 +113,7 @@ export default function GameBoard({
           <View style={styles.gridContainer}>
             {renderTiles()}
           </View>
-
+ 
           {/* Overlay the animated pieces relative to the boardContainer */}
           {pieces.map((piece) => {
             const isSelected = selectedPieceId === piece.id;
@@ -114,7 +124,7 @@ export default function GameBoard({
                 piece={piece}
                 cellWidth={cellWidth}
                 isSelected={isSelected}
-                onPress={() => onTileClick(piece.position.row, piece.position.col)}
+                onPress={inputDisabled ? () => {} : () => onTileClick(piece.position.row, piece.position.col)}
                 animatingPieceId={animatingPieceId}
                 onAnimationComplete={onAnimationComplete}
               />
