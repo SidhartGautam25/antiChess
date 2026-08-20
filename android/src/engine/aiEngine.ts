@@ -18,11 +18,13 @@ export function evaluateBoard(pieces: Piece[], config: LevelConfig): number {
   if (p1Pieces.length === 0) return 1000000;
 
   let score = 0;
+  const INFILTRATOR_VAL = 400;
   const RIDER_VAL = 300;
   const JUMPER_VAL = 200;
   const SCOUT_VAL = 100;
 
   const getPieceValue = (type: PieceType) => {
+    if (type === PieceType.INFILTRATOR) return INFILTRATOR_VAL;
     if (type === PieceType.RIDER) return RIDER_VAL;
     if (type === PieceType.JUMPER) return JUMPER_VAL;
     return SCOUT_VAL;

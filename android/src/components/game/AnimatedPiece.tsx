@@ -198,6 +198,7 @@ export function PieceView({
   const isScout = type === PieceType.SCOUT;
   const isRider = type === PieceType.RIDER;
   const isJumper = type === PieceType.JUMPER;
+  const isInfiltrator = type === PieceType.INFILTRATOR;
 
   const isPlayer1 = player === 1;
   const playerColors = isPlayer1 ? COLORS.player1 : COLORS.player2;
@@ -206,6 +207,12 @@ export function PieceView({
     ? {
         borderRadius: 8,
       }
+    : isInfiltrator
+    ? {
+        borderRadius: pieceSize / 2,
+        borderStyle: 'dashed' as const,
+        borderWidth: 3.5,
+      }
     : {
         borderRadius: pieceSize / 2,
       };
@@ -213,6 +220,12 @@ export function PieceView({
   const innerRingStyle = isScout
     ? {
         borderRadius: 5,
+      }
+    : isInfiltrator
+    ? {
+        borderRadius: (pieceSize * 0.70) / 2,
+        borderStyle: 'dashed' as const,
+        borderWidth: 1.5,
       }
     : {
         borderRadius: (pieceSize * 0.70) / 2,

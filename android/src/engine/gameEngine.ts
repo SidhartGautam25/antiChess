@@ -184,6 +184,30 @@ export function getLegalMoves(piece: Piece, pieces: Piece[], boardMap?: (Piece |
         legalMoves.push({ row: targetRow, col: targetCol });
       }
     }
+  } else if (piece.type === PieceType.INFILTRATOR) {
+    // INFILTRATOR/GHOST: Moves UP TO (4 - N) steps along any of the 8 vectors (orthogonal or diagonal)
+    const maxSteps = 4 - N;
+    for (const dir of DIRECTIONS) {
+      for (let step = 1; step <= maxSteps; step++) {
+        const targetRow = startRow + dir.r * step;
+        const targetCol = startCol + dir.c * step;
+        
+        if (!isValidSquare(targetRow, targetCol)) {
+          break;
+        }
+        
+        const pieceAtTarget = getPieceAt(targetRow, targetCol);
+        
+        if (!pieceAtTarget) {
+          legalMoves.push({ row: targetRow, col: targetCol });
+        } else {
+          if (pieceAtTarget.player !== piece.player) {
+            legalMoves.push({ row: targetRow, col: targetCol });
+          }
+          break;
+        }
+      }
+    }
   }
   
   return legalMoves;
