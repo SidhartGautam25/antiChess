@@ -60,21 +60,16 @@ export default function GameBoard({
 
   const lastOpponentMove = useMemo(() => {
     if (!moveLog || moveLog.length === 0) return null;
-    const opponentPlayer = 3 - activePlayer;
-    const prefix = `p${opponentPlayer}_`;
+    const opponentPlayer = (3 - activePlayer) as Player;
     for (let i = moveLog.length - 1; i >= 0; i--) {
-      const move = moveLog[i];
-      if (move.pieceId.startsWith(prefix)) {
-        return move;
-      }
+      if (moveLog[i].player === opponentPlayer) return moveLog[i];
     }
     return null;
   }, [moveLog, activePlayer]);
 
   const lastMoveColor = useMemo(() => {
     if (!lastOpponentMove) return undefined;
-    const isPlayer1 = lastOpponentMove.pieceId.startsWith('p1_');
-    return isPlayer1 ? COLORS.player1.secondary : COLORS.player2.secondary;
+    return lastOpponentMove.player === 1 ? COLORS.player1.secondary : COLORS.player2.secondary;
   }, [lastOpponentMove]);
 
   const tileGrid = useMemo(() => {
