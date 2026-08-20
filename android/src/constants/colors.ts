@@ -14,6 +14,7 @@ export const COLORS = {
   accentBlue: '#D4AF37', // Polished brass gold
   accentPink: '#A33B49', // Deep Burgundy
   accentAmber: '#FFCC00', // Polished bright amber gold
+  accentPurple: '#A855F7', // Indigo/Purple for Infiltrator (Ghost)
   
   // Board/Tile colors (High-contrast Matte wood/stone tones)
   tile1: '#F4F0E6', // Light Ash Wood

@@ -188,6 +188,7 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
       // Check 50-move limit
       if (state.movesCount >= 50) {
         const getWeight = (plist: Piece[]) => plist.reduce((acc, p) => {
+          if (p.type === PieceType.INFILTRATOR) return acc + 4;
           if (p.type === PieceType.RIDER) return acc + 3;
           if (p.type === PieceType.JUMPER) return acc + 2;
           return acc + 1;
@@ -562,5 +563,6 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
     boardRevision: sessionState.boardRevision,
     animatingPieceId: sessionState.animatingPieceId,
     onAnimationComplete: handleAnimationComplete,
+    moveLog: sessionState.moveLog,
   };
 }

@@ -4,6 +4,7 @@ export enum PieceType {
   SCOUT = 'SCOUT', // Moves EXACTLY N steps
   RIDER = 'RIDER', // Moves UP TO N steps
   JUMPER = 'JUMPER', // Moves EXACTLY N steps in L-shape
+  INFILTRATOR = 'INFILTRATOR', // Moves UP TO (4-N) steps
 }
 
 export interface Position {

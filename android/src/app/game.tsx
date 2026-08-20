@@ -37,6 +37,7 @@ export default function GameScreen() {
     restartGame,
     animatingPieceId,
     onAnimationComplete,
+    moveLog,
   } = useGameSession({
     initialMode: mode,
     initialLevel: level,
@@ -49,7 +50,7 @@ export default function GameScreen() {
 
   // Calculate captured pieces
   const getCapturedCount = (player: Player, type: PieceType) => {
-    // Expected count: Scout = 2, Jumper = 2, Rider = 2 (in 8x8 setup with 6 pieces)
+    // Expected count: Scout = 2, Jumper = 2, Rider = 2, Infiltrator = 2 (in 8x8 setup with 8 pieces)
     const expected = 2;
     const current = pieces.filter((p) => p.player === player && p.type === type).length;
     return Math.max(0, expected - current);
@@ -58,9 +59,11 @@ export default function GameScreen() {
   const p1ScoutsCaptured = getCapturedCount(1, PieceType.SCOUT);
   const p1JumpersCaptured = getCapturedCount(1, PieceType.JUMPER);
   const p1RidersCaptured = getCapturedCount(1, PieceType.RIDER);
+  const p1InfiltratorsCaptured = getCapturedCount(1, PieceType.INFILTRATOR);
   const p2ScoutsCaptured = getCapturedCount(2, PieceType.SCOUT);
   const p2JumpersCaptured = getCapturedCount(2, PieceType.JUMPER);
   const p2RidersCaptured = getCapturedCount(2, PieceType.RIDER);
+  const p2InfiltratorsCaptured = getCapturedCount(2, PieceType.INFILTRATOR);
 
   // Render Captured pieces indicators
   const renderCapturedBar = (player: Player) => {
@@ -68,6 +71,7 @@ export default function GameScreen() {
     const scouts = isP1 ? p1ScoutsCaptured : p2ScoutsCaptured;
     const jumpers = isP1 ? p1JumpersCaptured : p2JumpersCaptured;
     const riders = isP1 ? p1RidersCaptured : p2RidersCaptured;
+    const infiltrators = isP1 ? p1InfiltratorsCaptured : p2InfiltratorsCaptured;
     
     // We want the piece to be rendered using the CAPTURED PLAYER's colors and design!
     // player = 1 => Player 1's pieces (Ivory/Gold) were lost
@@ -81,15 +85,18 @@ export default function GameScreen() {
       const isScout = type === PieceType.SCOUT;
       const isRider = type === PieceType.RIDER;
       const isJumper = type === PieceType.JUMPER;
+      const isInfiltrator = type === PieceType.INFILTRATOR;
       
       const shapeStyle = isScout
         ? { borderRadius: 4 }
         : isRider
         ? { borderRadius: size / 2 }
+        : isInfiltrator
+        ? { borderRadius: size / 2, borderStyle: 'dashed' as const, borderWidth: 1.5 }
         : {}; // Octagon is custom
         
       const labelColor = player === 1 ? '#1F2937' : '#FFFFFF';
-      const letter = isScout ? 'S' : isRider ? 'R' : 'J';
+      const letter = isScout ? 'S' : isRider ? 'R' : isJumper ? 'J' : 'I';
       
       if (isJumper) {
         return (
@@ -164,7 +171,12 @@ export default function GameScreen() {
           <View 
             style={[
               styles.capturedMiniInnerRing,
-              isScout ? { borderRadius: 3 } : { borderRadius: (size * 0.70) / 2 },
+              isScout
+                ? { borderRadius: 3 }
+                : {
+                    borderRadius: (size * 0.70) / 2,
+                    ...(isInfiltrator ? { borderStyle: 'dashed' as const, borderWidth: 0.75 } : {})
+                  },
               {
                 borderColor: playerColors.primary + '40',
                 width: size * 0.70,
@@ -191,6 +203,10 @@ export default function GameScreen() {
     // Render captured Riders
     for (let i = 0; i < riders; i++) {
       items.push(renderMiniPiece(PieceType.RIDER, `rider-${i}`));
+    }
+    // Render captured Infiltrators
+    for (let i = 0; i < infiltrators; i++) {
+      items.push(renderMiniPiece(PieceType.INFILTRATOR, `infiltrator-${i}`));
     }
 
     const containerHeight = isShortScreen ? 20 : 26;
@@ -277,6 +293,7 @@ export default function GameScreen() {
           onTileClick={handleTileClick}
           animatingPieceId={animatingPieceId}
           onAnimationComplete={onAnimationComplete}
+          moveLog={moveLog}
         />
 
         {/* Bottom Status Bar: Player 1 status */}

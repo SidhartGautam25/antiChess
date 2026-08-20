@@ -59,7 +59,7 @@ export default function RulesScreen() {
         </View>
 
         {/* The Pieces Section */}
-        <Text style={[styles.sectionTitle, isShortScreen && { fontSize: 16, marginTop: 4, marginBottom: 2 }]}>Meet Your Army (6 Pieces Per Side)</Text>
+        <Text style={[styles.sectionTitle, isShortScreen && { fontSize: 16, marginTop: 4, marginBottom: 2 }]}>Meet Your Army (8 Pieces Per Side)</Text>
         <Text style={[styles.sectionSubtitle, isShortScreen && { fontSize: 11, marginBottom: 8 }]}>Each piece type has a unique movement style and point weight.</Text>
 
         {/* Piece 1: Rider */}
@@ -143,6 +143,33 @@ export default function RulesScreen() {
           </Text>
         </View>
 
+        {/* Piece 4: Infiltrator (Ghost) */}
+        <View style={[styles.card, styles.pieceCard, isShortScreen && { padding: 12, marginBottom: 12 }]}>
+          <View style={[styles.pieceHeaderRow, isShortScreen && { paddingBottom: 8, marginBottom: 8 }]}>
+            <View style={styles.pieceIdentity}>
+              <View style={[
+                styles.pieceIconBase, 
+                styles.infiltratorIcon,
+                isShortScreen && { width: 30, height: 30 }
+              ]}>
+                <Text style={[styles.pieceLetter, isShortScreen && { fontSize: 14 }]}>I</Text>
+              </View>
+              <View>
+                <Text style={[styles.pieceName, isShortScreen && { fontSize: 14 }]}>The Infiltrator (Ghost)</Text>
+                <Text style={[styles.pieceTypeTag, isShortScreen && { fontSize: 11 }]}>Unpredictable Specter</Text>
+              </View>
+            </View>
+            <View style={[styles.weightBadge, isShortScreen && { paddingVertical: 2, paddingHorizontal: 8 }]}>
+              <Text style={[styles.weightText, isShortScreen && { fontSize: 11 }]}>Weight: 4</Text>
+            </View>
+          </View>
+          <Text style={[styles.pieceDescription, isShortScreen && { fontSize: 12, lineHeight: 18 }]}>
+            The unpredictable specter! The Infiltrator (Ghost) slides along any of the 8 vectors (orthogonal or diagonal) <Text style={styles.boldText}>up to 4 - N steps</Text>.
+            {"\n\n"}
+            Because its maximum steps are inverted relative to momentum (<Text style={styles.boldText}>4 - N</Text>), it moves faster on slow tiles (3 steps on 1s) and slower on fast tiles (1 step on 3s). It cannot jump and is blocked by intervening pieces.
+          </Text>
+        </View>
+
         {/* Victory & Tiebreakers */}
         <View style={[styles.card, { borderColor: COLORS.accentPink + '40' }, isShortScreen && { padding: 12, marginBottom: 12 }]}>
           <View style={styles.cardHeader}>
@@ -150,11 +177,11 @@ export default function RulesScreen() {
             <Text style={[styles.cardTitle, isShortScreen && { fontSize: 14 }]}>Victory Conditions</Text>
           </View>
           <Text style={[styles.cardBody, isShortScreen && { fontSize: 12, lineHeight: 18 }]}>
-            Your ultimate goal is to wipe out all 6 of the opponent's pieces.
+            Your ultimate goal is to wipe out all 8 of the opponent's pieces.
             {"\n\n"}
             To keep matches intense and competitive, there is a strict limit of <Text style={styles.boldText}>50 moves</Text>. If the game reaches 50 moves, the player with the higher total weightage of remaining pieces on the board wins:
             {"\n"}
-            • <Text style={styles.boldText}>Rider</Text> = 3 points • <Text style={styles.boldText}>Jumper</Text> = 2 points • <Text style={styles.boldText}>Scout</Text> = 1 point
+            • <Text style={styles.boldText}>Infiltrator</Text> = 4 points • <Text style={styles.boldText}>Rider</Text> = 3 points • <Text style={styles.boldText}>Jumper</Text> = 2 points • <Text style={styles.boldText}>Scout</Text> = 1 point
             {"\n\n"}
             If both players have the exact same remaining weightage, the game is declared a <Text style={styles.boldText}>Draw</Text>!
           </Text>
@@ -283,6 +310,12 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderColor: COLORS.accentPink,
     backgroundColor: COLORS.accentPink + '15',
+  },
+  infiltratorIcon: {
+    borderRadius: 20,
+    borderColor: COLORS.accentPurple,
+    backgroundColor: COLORS.accentPurple + '15',
+    borderStyle: 'dashed',
   },
   pieceLetter: {
     fontSize: 18,

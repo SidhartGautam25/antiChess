@@ -16,6 +16,12 @@ export const BOARD_SIZE = 8;
 export const INITIAL_PIECES: Piece[] = [
   // Player 2 (Top, Ebony/Silver)
   {
+    id: 'p2_infiltrator1',
+    type: PieceType.INFILTRATOR,
+    player: 2,
+    position: { row: 0, col: 0 },
+  },
+  {
     id: 'p2_scout1',
     type: PieceType.SCOUT,
     player: 2,
@@ -51,7 +57,19 @@ export const INITIAL_PIECES: Piece[] = [
     player: 2,
     position: { row: 0, col: 6 },
   },
+  {
+    id: 'p2_infiltrator2',
+    type: PieceType.INFILTRATOR,
+    player: 2,
+    position: { row: 0, col: 7 },
+  },
   // Player 1 (Bottom, Ivory/Gold)
+  {
+    id: 'p1_infiltrator1',
+    type: PieceType.INFILTRATOR,
+    player: 1,
+    position: { row: 7, col: 0 },
+  },
   {
     id: 'p1_scout1',
     type: PieceType.SCOUT,
@@ -87,5 +105,11 @@ export const INITIAL_PIECES: Piece[] = [
     type: PieceType.SCOUT,
     player: 1,
     position: { row: 7, col: 6 },
+  },
+  {
+    id: 'p1_infiltrator2',
+    type: PieceType.INFILTRATOR,
+    player: 1,
+    position: { row: 7, col: 7 },
   },
 ];
