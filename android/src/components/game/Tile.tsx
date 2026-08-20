@@ -10,6 +10,9 @@ interface TileProps {
   isLegalTarget: boolean;
   isEnemyOccupied: boolean;
   onTileClick: (row: number, col: number) => void;
+  isLastMoveFrom?: boolean;
+  isLastMoveTo?: boolean;
+  lastMoveColor?: string;
 }
 
 function Tile({
@@ -20,6 +23,9 @@ function Tile({
   isLegalTarget,
   isEnemyOccupied,
   onTileClick,
+  isLastMoveFrom,
+  isLastMoveTo,
+  lastMoveColor,
 }: TileProps) {
   const handlePress = React.useCallback(() => {
     onTileClick(row, col);
@@ -102,6 +108,16 @@ function Tile({
       {/* Cell value number */}
       <Text style={[styles.valueLabel, { color: finalLabelColor }]}>{value}</Text>
 
+      {/* Indicator for last move departure (from) square */}
+      {isLastMoveFrom && (
+        <View style={[styles.lastMoveFromRing, lastMoveColor ? { borderColor: lastMoveColor } : null]} />
+      )}
+
+      {/* Indicator for last move arrival (to) square */}
+      {isLastMoveTo && (
+        <View style={[styles.lastMoveToRing, lastMoveColor ? { borderColor: lastMoveColor } : null]} />
+      )}
+
       {/* Capture lock-on target reticle */}
       {isLegalTarget && isEnemyOccupied && (
         <View style={styles.captureTargetRing} />
@@ -160,6 +176,29 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: COLORS.legalMove,
     zIndex: 10,
+  },
+  lastMoveFromRing: {
+    position: 'absolute',
+    top: 3,
+    bottom: 3,
+    left: 3,
+    right: 3,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#E11D48', // COLORS.player2.secondary (Crimson)
+    borderStyle: 'dashed',
+    zIndex: 4,
+  },
+  lastMoveToRing: {
+    position: 'absolute',
+    top: 3,
+    bottom: 3,
+    left: 3,
+    right: 3,
+    borderRadius: 4,
+    borderWidth: 2.2,
+    borderColor: '#E11D48', // COLORS.player2.secondary (Crimson)
+    zIndex: 4,
   },
 });
 

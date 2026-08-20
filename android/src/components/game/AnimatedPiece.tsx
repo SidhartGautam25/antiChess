@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, View, Pressable, Platform } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, runOnJS, cancelAnimation } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, runOnJS } from 'react-native-reanimated';
 import { Piece, PieceType, Player } from '../../types/game';
 import { COLORS } from '../../constants/colors';
 import { FIXED_BOARD } from '../../constants/board';
@@ -21,14 +21,21 @@ function toBoardCoords(row: number, col: number, cellWidth: number, centeringOff
   };
 }
 
-// Symmetric easing gives long bot moves a deliberate glide without feeling floaty.
+// Soft ease-in-out. Duration (not this curve) is what keeps speed stable.
 const MOVE_EASING = Easing.inOut(Easing.cubic);
 
+// 1–2 squares keep the previous pace; extra distance beyond that is cheaper.
+const MS_PER_CELL_SHORT = 520;
+const MS_PER_CELL_LONG = 240;
+const SHORT_DISTANCE = 2;
+
 function getMoveDuration(fromRow: number, fromCol: number, toRow: number, toCol: number) {
-  const cellDistance = Math.max(Math.abs(toRow - fromRow), Math.abs(toCol - fromCol));
-  if (cellDistance === 0) return 0;
-  // Slower, smooth and elegant sliding: 600ms base + 80ms per cell, capped at 1000ms.
-  return Math.min(1000, 600 + cellDistance * 80);
+  const dist = Math.hypot(toRow - fromRow, toCol - fromCol);
+  if (dist === 0) return 0;
+  if (dist <= SHORT_DISTANCE) {
+    return dist * MS_PER_CELL_SHORT;
+  }
+  return SHORT_DISTANCE * MS_PER_CELL_SHORT + (dist - SHORT_DISTANCE) * MS_PER_CELL_LONG;
 }
 
 function AnimatedPiece({
@@ -39,9 +46,6 @@ function AnimatedPiece({
   animatingPieceId,
   onAnimationComplete,
 }: AnimatedPieceProps) {
-  const handlePress = React.useCallback(() => {
-    onTileClick(piece.position.row, piece.position.col);
-  }, [onTileClick, piece.position.row, piece.position.col]);
   const isJumper = piece.type === PieceType.JUMPER;
   const tileInnerWidth = cellWidth > 3 ? cellWidth - 3 : 0;
   let pieceSize = tileInnerWidth * 0.80;
@@ -50,10 +54,24 @@ function AnimatedPiece({
 
   const prevRow = React.useRef(piece.position.row);
   const prevCol = React.useRef(piece.position.col);
-  const prevCellWidth = React.useRef(cellWidth);
-  const prevCenteringOffset = React.useRef(centeringOffset);
+  const moveGen = React.useRef(0);
+  const isMoveInFlight = React.useRef(false);
 
-  // translateX/Y ARE the piece's visual position — nothing else drives layout.
+  const onTileClickRef = React.useRef(onTileClick);
+  onTileClickRef.current = onTileClick;
+  const onAnimationCompleteRef = React.useRef(onAnimationComplete);
+  onAnimationCompleteRef.current = onAnimationComplete;
+
+  const handlePress = React.useCallback(() => {
+    onTileClickRef.current(piece.position.row, piece.position.col);
+  }, [piece.position.row, piece.position.col]);
+
+  const notifyComplete = React.useCallback((pieceId: string, gen: number) => {
+    if (gen !== moveGen.current) return;
+    isMoveInFlight.current = false;
+    onAnimationCompleteRef.current(pieceId);
+  }, []);
+
   const initial = toBoardCoords(piece.position.row, piece.position.col, cellWidth, centeringOffset);
   const translateX = useSharedValue(initial.x);
   const translateY = useSharedValue(initial.y);
@@ -63,59 +81,46 @@ function AnimatedPiece({
     col: piece.position.col,
   });
 
-  const handleAnimationFinished = React.useCallback(
-    (pieceId: string) => onAnimationComplete(pieceId),
-    [onAnimationComplete]
-  );
+  // One effect owns visual position. Callback identity and parent re-renders
+  // must not restart or cancel an in-flight slide.
+  useEffect(() => {
+    const row = piece.position.row;
+    const col = piece.position.col;
+    const { x, y } = toBoardCoords(row, col, cellWidth, centeringOffset);
+    const moved = prevRow.current !== row || prevCol.current !== col;
+    const thisPieceIsMover = animatingPieceId === piece.id;
 
-  const snapTo = React.useCallback(
-    (x: number, y: number, row: number, col: number) => {
-      cancelAnimation(translateX);
-      cancelAnimation(translateY);
-      translateX.value = x;
-      translateY.value = y;
+    if (moved && thisPieceIsMover) {
+      const duration = getMoveDuration(prevRow.current, prevCol.current, row, col);
+      prevRow.current = row;
+      prevCol.current = col;
       setDisplayPos({ row, col });
-    },
-    [translateX, translateY]
-  );
 
-  // Keep every non-animating piece locked to its logical board position.
-  useEffect(() => {
-    if (animatingPieceId === piece.id) return;
-    const coords = toBoardCoords(piece.position.row, piece.position.col, cellWidth, centeringOffset);
-    snapTo(coords.x, coords.y, piece.position.row, piece.position.col);
-  }, [animatingPieceId, piece.id, piece.position.row, piece.position.col, cellWidth, centeringOffset, snapTo]);
+      const gen = ++moveGen.current;
+      isMoveInFlight.current = true;
+      const timing = { duration, easing: MOVE_EASING };
 
-  // Animate only the piece that actually moved; snap instantly on layout changes/undo/reset.
-  useEffect(() => {
-    const targetCoords = toBoardCoords(piece.position.row, piece.position.col, cellWidth, centeringOffset);
-    const positionChanged = prevRow.current !== piece.position.row || prevCol.current !== piece.position.col;
-    const layoutChanged = prevCellWidth.current !== cellWidth || prevCenteringOffset.current !== centeringOffset;
-
-    if (positionChanged || layoutChanged) {
-      if (positionChanged && animatingPieceId === piece.id) {
-        const duration = getMoveDuration(prevRow.current, prevCol.current, piece.position.row, piece.position.col);
-        const timingConfig = { duration, easing: MOVE_EASING };
-
-        cancelAnimation(translateX);
-        cancelAnimation(translateY);
-
-        setDisplayPos({ row: piece.position.row, col: piece.position.col });
-
-        translateX.value = withTiming(targetCoords.x, timingConfig);
-        translateY.value = withTiming(targetCoords.y, timingConfig, (finished) => {
-          'worklet';
-          if (finished) runOnJS(handleAnimationFinished)(piece.id);
-        });
-      } else {
-        snapTo(targetCoords.x, targetCoords.y, piece.position.row, piece.position.col);
-      }
+      translateX.value = withTiming(x, timing);
+      translateY.value = withTiming(y, timing, (finished) => {
+        'worklet';
+        if (finished) {
+          runOnJS(notifyComplete)(piece.id, gen);
+        }
+      });
+      return;
     }
 
-    prevRow.current = piece.position.row;
-    prevCol.current = piece.position.col;
-    prevCellWidth.current = cellWidth;
-    prevCenteringOffset.current = centeringOffset;
+    prevRow.current = row;
+    prevCol.current = col;
+
+    // Layout / undo / other-piece updates: never interrupt a live slide.
+    if (thisPieceIsMover || isMoveInFlight.current) {
+      return;
+    }
+
+    translateX.value = x;
+    translateY.value = y;
+    setDisplayPos({ row, col });
   }, [
     piece.position.row,
     piece.position.col,
@@ -123,19 +128,10 @@ function AnimatedPiece({
     centeringOffset,
     animatingPieceId,
     piece.id,
-    snapTo,
-    handleAnimationFinished,
+    notifyComplete,
     translateX,
     translateY,
   ]);
-
-  // Cleanup on unmount (e.g. piece captured mid-animation)
-  useEffect(() => {
-    return () => {
-      cancelAnimation(translateX);
-      cancelAnimation(translateY);
-    };
-  }, [translateX, translateY]);
 
   const isAnimating = piece.id === animatingPieceId;
 
@@ -387,11 +383,9 @@ const styles = StyleSheet.create({
 // animatingPieceId changes entirely — a piece that has nothing to do with
 // the current move shouldn't re-render just because SOME piece moved.
 function arePiecePropsEqual(prev: AnimatedPieceProps, next: AnimatedPieceProps): boolean {
-  if (prev.piece !== next.piece) return false; // reducer keeps stable refs for untouched pieces
+  if (prev.piece !== next.piece) return false;
   if (prev.cellWidth !== next.cellWidth) return false;
   if (prev.isSelected !== next.isSelected) return false;
-  if (prev.onTileClick !== next.onTileClick) return false;
-  if (prev.onAnimationComplete !== next.onAnimationComplete) return false;
 
   const pieceId = next.piece.id;
   const wasRelevant = prev.animatingPieceId === pieceId;

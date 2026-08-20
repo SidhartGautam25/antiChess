@@ -563,5 +563,6 @@ export function useGameSession({ initialMode, initialLevel, onSaveMatch }: GameS
     boardRevision: sessionState.boardRevision,
     animatingPieceId: sessionState.animatingPieceId,
     onAnimationComplete: handleAnimationComplete,
+    moveLog: sessionState.moveLog,
   };
 }

@@ -37,6 +37,7 @@ export default function GameScreen() {
     restartGame,
     animatingPieceId,
     onAnimationComplete,
+    moveLog,
   } = useGameSession({
     initialMode: mode,
     initialLevel: level,
@@ -292,6 +293,7 @@ export default function GameScreen() {
           onTileClick={handleTileClick}
           animatingPieceId={animatingPieceId}
           onAnimationComplete={onAnimationComplete}
+          moveLog={moveLog}
         />
 
         {/* Bottom Status Bar: Player 1 status */}

@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { StyleSheet, View, LayoutChangeEvent } from 'react-native';
 import { FIXED_BOARD, BOARD_SIZE } from '../../constants/board';
 import { COLORS } from '../../constants/colors';
-import { Piece, Player, Position } from '../../types/game';
+import { Piece, Player, Position, MoveLogItem } from '../../types/game';
 import Tile from './Tile';
 import AnimatedPiece from './AnimatedPiece';
 
@@ -15,6 +15,7 @@ interface GameBoardProps {
   onTileClick: (row: number, col: number) => void;
   animatingPieceId: string | null;
   onAnimationComplete: (pieceId: string) => void;
+  moveLog?: MoveLogItem[];
 }
 
 export default function GameBoard({
@@ -26,6 +27,7 @@ export default function GameBoard({
   onTileClick,
   animatingPieceId,
   onAnimationComplete,
+  moveLog = [],
 }: GameBoardProps) {
   const [parentDimensions, setParentDimensions] = useState({ width: 0, height: 0 });
 
@@ -56,6 +58,25 @@ export default function GameBoard({
     return set;
   }, [legalMoves]);
 
+  const lastOpponentMove = useMemo(() => {
+    if (!moveLog || moveLog.length === 0) return null;
+    const opponentPlayer = 3 - activePlayer;
+    const prefix = `p${opponentPlayer}_`;
+    for (let i = moveLog.length - 1; i >= 0; i--) {
+      const move = moveLog[i];
+      if (move.pieceId.startsWith(prefix)) {
+        return move;
+      }
+    }
+    return null;
+  }, [moveLog, activePlayer]);
+
+  const lastMoveColor = useMemo(() => {
+    if (!lastOpponentMove) return undefined;
+    const isPlayer1 = lastOpponentMove.pieceId.startsWith('p1_');
+    return isPlayer1 ? COLORS.player1.secondary : COLORS.player2.secondary;
+  }, [lastOpponentMove]);
+
   const tileGrid = useMemo(() => {
     const grid = [];
     for (let r = 0; r < BOARD_SIZE; r++) {
@@ -67,6 +88,11 @@ export default function GameBoard({
         const isLegal = legalMoveSet.has(`${r},${c}`);
         const isEnemy = pieceAtTile ? pieceAtTile.player !== activePlayer : false;
 
+        const isLastMoveFrom = !isBotThinking && !animatingPieceId &&
+          lastOpponentMove && lastOpponentMove.from.row === r && lastOpponentMove.from.col === c;
+        const isLastMoveTo = !isBotThinking && !animatingPieceId &&
+          lastOpponentMove && lastOpponentMove.to.row === r && lastOpponentMove.to.col === c;
+
         rowTiles.push(
           <Tile
             key={`${r}-${c}`}
@@ -77,6 +103,9 @@ export default function GameBoard({
             isLegalTarget={isLegal}
             isEnemyOccupied={isEnemy}
             onTileClick={onTileClick}
+            isLastMoveFrom={isLastMoveFrom || undefined}
+            isLastMoveTo={isLastMoveTo || undefined}
+            lastMoveColor={lastMoveColor}
           />
         );
       }
@@ -87,7 +116,7 @@ export default function GameBoard({
       );
     }
     return grid;
-  }, [pieceMap, legalMoveSet, selectedPieceId, activePlayer, onTileClick]);
+  }, [pieceMap, legalMoveSet, selectedPieceId, activePlayer, onTileClick, lastOpponentMove, lastMoveColor, isBotThinking, animatingPieceId]);
 
   return (
     <View style={styles.wrapper} onLayout={handleLayout}>
