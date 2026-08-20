@@ -29,6 +29,8 @@ const MS_PER_CELL_SHORT = 520;
 const MS_PER_CELL_LONG = 240;
 const SHORT_DISTANCE = 2;
 
+// NOTE: Ensure worst-case duration stays safely below the useAnimationWatchdog's 2500ms timeout limit!
+// Currently max real distance is 3 diagonal cells (~4.24 units), resulting in ~1578ms max duration.
 function getMoveDuration(fromRow: number, fromCol: number, toRow: number, toCol: number) {
   const dist = Math.hypot(toRow - fromRow, toCol - fromCol);
   if (dist === 0) return 0;

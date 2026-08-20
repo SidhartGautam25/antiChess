@@ -42,6 +42,7 @@ export interface LevelConfig {
 export interface MoveLogItem {
   revision: number;
   pieceId: string;
+  player: Player;
   from: Position;
   to: Position;
   capturedPieceId?: string;
